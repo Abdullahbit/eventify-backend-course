@@ -1,0 +1,6 @@
+- [ ] Task 1: Update domain types in `src/domain.ts` and add `findById`
+- [ ] Task 2: Create local seed data file at `data/events.json`
+- [ ] Task 3: Build the base server in `src/server.ts` with `/health` and 404 routing
+- [ ] Task 4: Load events dynamically from `data/events.json` (lazy loading & error safety)
+- [ ] Task 5: Implement `GET /events/:id` path-splitting logic
+- [ ] Task 6: Verify with typecheck, lint, and curls
