@@ -76,4 +76,4 @@ mv data/events.json.bak data/events.json
 
 ---
 
-`Note for reviewers:` any function changed here may be used as a walkthrough example in the next session. Please review `src/server.ts` and `src/domain.ts` carefully.
+
