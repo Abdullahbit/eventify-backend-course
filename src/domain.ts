@@ -7,4 +7,37 @@
 // plus the generic `findById`. Acceptance: `npm run typecheck` passes and
 // there is no `any` anywhere.
 
-export type Event = { id: string; title: string; capacity: number };
+export type Role = 'ATTENDEE' | 'ORGANIZER' | 'ADMIN';
+export type BookingStatus = 'CONFIRMED' | 'CANCELLED' | 'WAITLISTED';
+
+export interface User {
+    id: string;
+    email: string;
+    name: string;
+    role: Role;
+    createdAt: string;
+}
+
+export interface Event {
+    id: string;
+    title: string;
+    description: string;
+    venue: string | null;
+    startsAt: string;
+    capacity: number;
+    priceCents: number;
+    organizerId: string;
+    createdAt: string;
+}
+
+export interface Booking {
+    id: string;
+    userId: string;
+    eventId: string;
+    status: BookingStatus;
+    createdAt: string;
+}
+
+export function findById<T extends { id: string }>(items: T[], id: string): T | undefined {
+    return items.find((item) => item.id === id);
+}
