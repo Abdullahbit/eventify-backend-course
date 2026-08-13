@@ -1,0 +1,24 @@
+[
+    {
+        "id": "evt-1",
+        "title": "TypeScript Mastery Workshop",
+        "description": "Deep dive into advanced TypeScript patterns.",
+        "venue": "Tech Hub Room A",
+        "startsAt": "2026-09-01T09:00:00.000Z",
+        "capacity": 50,
+        "priceCents": 9900,
+        "organizerId": "usr-1",
+        "createdAt": "2026-08-12T12:00:00.000Z"
+    },
+    {
+        "id": "evt-2",
+        "title": "Node.js Scale Conf",
+        "description": "Learn to scale your backend services.",
+        "venue": null,
+        "startsAt": "2026-10-15T10:00:00.000Z",
+        "capacity": 200,
+        "priceCents": 0,
+        "organizerId": "usr-1",
+        "createdAt": "2026-08-12T12:00:00.000Z"
+    }
+]
