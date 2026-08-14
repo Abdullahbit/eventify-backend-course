@@ -1,43 +1,49 @@
-import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import type { Events } from "./domain.ts";
+import express from "express";
+import type { NextFunction, Request, Response } from "express";
+import bookingRoutes from "./bookings/routes.ts";
+import { HttpError } from "./http/HttpError.ts";
+import eventRoutes from "./events/routes.ts";
+import venueRoutes from "./venues/routes.ts";
 
-// lazy cache for events (loaded on first GET /events)
-let cachedEvents: Events[] | null = null;
+const app = express();
+const port = 3000;
 
-const server = createServer(async (req, res) => {
-  // Route 1: GET /health
-  if(req.method === "GET" && req.url === "/health") {
-    res.writeHead(200, {"Content-Type": "application/json"});
-    res.end(JSON.stringify({status: "ok", uptime: process.uptime()}));
-    return;
-  }
+app.use(express.json());
 
-  // Route 2: GET /events
-  if(req.method === "GET" && req.url === "/events") {
-    // load lazily on first request
-    if (!cachedEvents) {
-      try {
-        const file = await readFile("data/events.json", "utf-8");
-        cachedEvents = JSON.parse(file) as Events[];
-      } catch (err) {
-        console.error("Failed to read data/events.json:", err);
-        res.writeHead(500, {"Content-Type": "application/json"});
-        res.end(JSON.stringify({error: "Internal Server Error"}));
-        return;
-      }
-    }
-
-    res.writeHead(200, {"Content-Type": "application/json"});
-    res.end(JSON.stringify(cachedEvents));
-    return;
-  }
-
-  // Not Found:  for any other route, return 404
-  res.writeHead(404, {"Content-Type": "application/json"});
-  res.end(JSON.stringify({error: "Not Found"}));
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime() });
 });
 
-server.listen(3000, () => {
-  console.log("Server is running on http://localhost:3000/health");
+app.use("/v1/venues", venueRoutes);
+app.use("/v1/events", eventRoutes);
+app.use("/v1/bookings", bookingRoutes);
+
+app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  void _next;
+
+  if (error instanceof HttpError) {
+    res.status(error.statusCode).json({ error: error.message, details: error.details });
+    return;
+  }
+
+  if (
+    error instanceof SyntaxError &&
+    "status" in error &&
+    typeof error.status === "number" &&
+    error.status === 400
+  ) {
+    res.status(400).json({ error: "Invalid JSON body", details: null });
+    return;
+  }
+
+  console.error(error);
+  res.status(500).json({ error: "Internal Server Error", details: null });
+});
+
+app.use((_req, res) => {
+  res.status(404).json({ error: "Not Found", details: null });
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}/health`);
 });

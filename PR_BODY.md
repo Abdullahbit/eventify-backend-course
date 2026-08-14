@@ -1,78 +1,146 @@
-# PR: feat(task3): lazy-load events from data/events.json using fs/promises
+# PR: feat(session-2): In-memory bookings, events pagination/filtering, and validation consistency
 
 ## What I built
-- Implemented Task 3: moved event data into `data/events.json` and changed the server to lazy-load the file on the first `GET /events` request.
-- Loading uses `node:fs/promises` with `async/await` and a `try/catch` to handle read failures.
-- Added an in-memory cache `cachedEvents` to avoid repeated file reads.
-- On read failure the server logs the error and responds with HTTP 500 and a JSON body. `/health` remains unaffected and returns 200.
+
+### 1. In-memory bookings resource (`/v1/bookings`)
+- **Create booking** (`POST /v1/bookings`): Accept `eventId`, validate via Zod, check event exists, check no duplicate booking for user, verify event capacity not exceeded.
+- **Get booking** (`GET /v1/bookings/:id`): Return booking or 404.
+- **Cancel booking** (`DELETE /v1/bookings/:id`): Mark booking as `CANCELLED`, return updated booking or 404.
+- Bookings stored in-memory using `Map<id, Booking>`.
+- Current user hardcoded as `"user-1"` for all requests.
+
+### 2. Events pagination and filtering (`/v1/events`)
+- **List events** (`GET /v1/events`): Returns paginated and filtered events from `data/events.json`.
+- Query parameters:
+  - `page` (default: 1, min: 1)
+  - `limit` (default: 20, min: 1, max: 100)
+  - `venue` (optional, exact match on event.venue)
+  - `from` (optional, ISO datetime, filters events >= from)
+  - `to` (optional, ISO datetime, filters events <= to)
+- Response format: `{ data: Event[], page, limit, total }`
+
+### 3. Validation middleware and consistency
+- **`validate(schema)`**: Validates `req.body` with Zod, passes validated data to next handler, throws `HttpError(400, ...)` on parse failure.
+- **`validateQuery(schema)`**: Validates `req.query` with Zod, stores validated data in `res.locals.query`, throws `HttpError(400, ...)` on parse failure.
+- **Centralized error middleware** in `src/server.ts`: Catches all errors, returns `{ error, details }` JSON with appropriate HTTP status.
+- **HttpError** class: Custom error with `statusCode` and `details` fields.
+- All handlers use service layer for business logic; controllers only parse and forward.
+- Status codes:
+  - 201 for create
+  - 200 for read/update/delete
+  - 400 for validation failure
+  - 404 for not found
+  - 409 for duplicate/capacity conflict
+  - 500 for unhandled errors
+
+### 4. Architecture
+- **Routes layer**: Define endpoints and attach middleware.
+- **Controller layer**: Parse request, call service, forward response.
+- **Service layer**: Business logic, data access, error handling.
+- **Middleware**: Validation, error handling.
+- **Domain**: Shared types and utilities.
 
 ## How to run
-1. Install dependencies:
 
-```bash
-npm install
+### Start the server
+```powershell
+cd c:\eventify-backend-course-1
+node src/server.ts
 ```
 
-2. Type-check the project:
+### Test with PowerShell
 
-```bash
-npm run typecheck
+**Health check:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3000/health"
 ```
 
-3. Start the dev server:
-
-```bash
-npm run dev
+**List events:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3000/v1/events?page=1&limit=2"
 ```
 
-4. Test endpoints:
-
-- Health check (should return 200 JSON):
-
-```bash
-curl http://localhost:3000/health
+**Create booking:**
+```powershell
+$body = '{"eventId":"evt-1"}'
+$booking = Invoke-RestMethod -Method Post -Uri "http://localhost:3000/v1/bookings" -ContentType "application/json" -Body $body
+$booking | Format-List *
 ```
 
-- Events (should return array of events):
-
-```bash
-curl http://localhost:3000/events
+**Get booking:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3000/v1/bookings/$($booking.id)"
 ```
 
-- Simulate missing data file (server must return 500 JSON and stay alive):
-
-```bash
-mv data/events.json data/events.json.bak
-curl -i http://localhost:3000/events   # expect HTTP/1.1 500 and JSON body
-curl http://localhost:3000/health      # expect 200
-mv data/events.json.bak data/events.json
+**Cancel booking:**
+```powershell
+Invoke-RestMethod -Method Delete -Uri "http://localhost:3000/v1/bookings/$($booking.id)"
 ```
-
-## Which parts were AI-assisted — and how I verified them
-- AI-assisted: generation and edits to `src/server.ts` (lazy-loading logic, caching, async error handling) and creation of `todo.md` and `PR_BODY.md`.
-- Verification performed locally by:
-  - Running `npm run typecheck` (TypeScript checks pass).
-  - Running the dev server (`npm run dev`) and using `curl` to test:
-    - Normal `/events` path returns 200 + JSON
-    - With file missing, `/events` returns 500 + JSON and the server continues to respond to `/health` with 200
-
-## One concrete thing the agent (assistant) got wrong — and how it was caught
-- Issue: The assistant initially tried to import `Event` from `src/domain.ts` while the interface in the file was named `Events` and was not exported; this caused a type/import error.
-- How it was caught: Running `npm run typecheck` produced a TS error (TS2459). The fix was to export the correct interface and align imports. This demonstrates the importance of running the typechecker.
 
 ## Files changed (high level)
-- `src/server.ts` — implement lazy async load, caching, error handling
-- `src/domain.ts` — export the `Events` interface
-- `data/events.json` — moved events data to JSON file
-- `todo.md` — plan for Task 3
-- `PR_BODY.md` — this PR description
+- `src/server.ts` — Mount routes, centralized error middleware, app bootstrap.
+- `src/domain.ts` — Shared domain types and utilities.
+- `src/http/HttpError.ts` — Custom error class with statusCode and details.
+- `src/middleware/validate.ts` — Body and query validation middleware.
+- `src/events/routes.ts`, `src/events/controller.ts`, `src/events/service.ts`, `src/events/schema.ts`, `src/events/types.ts` — Events pagination and filtering.
+- `src/bookings/routes.ts`, `src/bookings/controller.ts`, `src/bookings/service.ts`, `src/bookings/schema.ts`, `src/bookings/types.ts` — In-memory bookings CRUD.
+- `src/venues/routes.ts`, `src/venues/controller.ts`, `src/venues/service.ts`, `src/venues/schema.ts`, `src/venues/types.ts` — Venue CRUD (built in earlier session).
+- `tasks/todo.md` — Session 2 plan with checklist.
+- `PR_BODY.md` — This PR description.
+
+## AI assistance and verification
+
+**AI-assisted components:**
+- All route, controller, service, schema, and type files generated by AI.
+- Validation middleware and error handling logic.
+- Domain utilities and shared types.
+
+**Where AI was used and one concrete thing it got wrong:**
+
+The assistant generated all middleware, route handlers, and service logic. One significant error caught during verification:
+
+- **Issue:** The assistant initially tried to assign parsed query validation results directly to `req.query` inside the `validateQuery` middleware, and then read them directly from `req.query` in controllers. This violates Express 5's read-only constraint on `req.query`.
+- **How it was caught:** When the actual server started and we tested `GET /v1/events?page=1&limit=2`, the query parameters were not being passed through correctly. Checking the middleware and comparing to class patterns revealed the error.
+- **Fix:** Changed `validateQuery` to store parsed results in `res.locals.query` instead of mutating `req.query`, and updated all controllers to read from `res.locals.query` rather than directly from `req.query`.
+
+This demonstrates the importance of:
+1. Running the actual server during development, not just typechecking.
+2. Understanding framework constraints (Express 5 read-only `req.query`).
+3. Following the layering rule: service logic in services, not controllers.
+
+**Verification performed:**
+- `npm run typecheck` — Passes with no errors.
+- `npm run lint` — Passes with no errors.
+- Live server test on port 3000:
+  - `/health` → 200 JSON ✓
+  - `/v1/events?page=1&limit=2` → 200 JSON with paginated data ✓
+  - `POST /v1/bookings` → 201 JSON with booking object ✓
+  - `GET /v1/bookings/{id}` → 200 JSON with booking ✓
+  - `DELETE /v1/bookings/{id}` → 200 JSON with cancelled booking ✓
+
+## Exit ticket
+
+**When Session 3 swaps the in-memory Map for Postgres, why do the controllers not change?**
+
+Because all business logic — duplicate checks, capacity validation, filtering, pagination — lives in the **service layer**, not the controllers. Controllers only validate input, call the service, and return the response. The service contracts (function signatures, error types) stay the same; only the storage backend and query logic inside the service change from `Map` to Postgres queries. This is why we layered the code: routes → controllers → services → data store.
 
 ## Acceptance checklist
-- [x] `GET /events` returns JSON array when `data/events.json` exists
-- [x] with `data/events.json` removed/renamed, `GET /events` logs error and returns HTTP 500 JSON
-- [x] `GET /health` continues to return HTTP 200
+- [x] In-memory bookings resource with create/get/cancel
+- [x] Duplicate booking check (per user, per event)
+- [x] Event capacity validation
+- [x] Events pagination with page/limit query parameters
+- [x] Events filtering by venue, from date, to date
+- [x] Validation middleware using Zod
+- [x] HttpError with statusCode and details
+- [x] Centralized error middleware
+- [x] Correct HTTP status codes (201, 200, 400, 404, 409, 500)
+- [x] Service layer owns business logic
+- [x] Controllers only parse and forward
+- [x] All handlers use middleware and error propagation
 - [x] `npm run typecheck` passes
-- [x] `todo.md` plan is included in the PR
+- [x] `npm run lint` passes
+- [x] Live endpoint testing on port 3000 passes
+- [x] Plan in `tasks/todo.md` with all checkmarks
 
 ---
 
