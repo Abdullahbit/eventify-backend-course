@@ -1,84 +1,97 @@
-import { randomUUID } from "node:crypto";
+import { prisma } from "../db.ts";
+import { Prisma } from "../generated/prisma/client.ts";
 import { HttpError } from "../http/HttpError.ts";
-import { findById } from "../domain.ts";
-import { readFile } from "node:fs/promises";
-import type { Booking, BookingStatus } from "./types.ts";
-import type { Event } from "../domain.ts";
+import * as bookingRepo from "./repository.ts";
+import * as eventRepo from "../events/repository.ts";
 
-const currentUserId = "user-1";
-const bookings = new Map<string, Booking>();
-let cachedEvents: Event[] | null = null;
-
-async function loadEvents(): Promise<Event[]> {
-  if (cachedEvents) {
-    return cachedEvents;
-  }
-
-  const file = await readFile("data/events.json", "utf-8");
-  cachedEvents = JSON.parse(file) as Event[];
-  return cachedEvents;
-}
-
-function getConfirmedCountForEvent(eventId: string): number {
-  return [...bookings.values()].filter(
-    (booking) => booking.eventId === eventId && booking.status === "CONFIRMED",
-  ).length;
-}
-
-export async function createBooking(eventId: string): Promise<Booking> {
-  const events = await loadEvents();
-  const event = findById(events, eventId);
-
+/**
+ * Transactional booking creation.
+ *
+ * Runs inside prisma.$transaction with Serializable isolation.
+ * - Checks capacity (CONFIRMED count only).
+ * - Handles rebooking: flips CANCELLED → CONFIRMED.
+ * - Maps P2002 (unique constraint) → 409.
+ */
+export async function createBooking(userId: string, eventId: string) {
+  // Quick check: event must exist
+  const event = await eventRepo.getById(eventId);
   if (!event) {
     throw new HttpError(404, "Unknown eventId");
   }
 
-  const duplicate = [...bookings.values()].find(
-    (booking) => booking.userId === currentUserId && booking.eventId === eventId,
-  );
+  try {
+    const booking = await prisma.$transaction(
+      async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
+        // 1. Capacity check — count only CONFIRMED bookings
+        const confirmedCount = await bookingRepo.countConfirmed(eventId, tx);
 
-  if (duplicate) {
-    throw new HttpError(409, "This user already has a booking for this event");
+        if (confirmedCount >= event.capacity) {
+          throw new HttpError(409, "Event at capacity");
+        }
+
+        // 2. Look for an existing booking row (handles rebooking)
+        const existing = await bookingRepo.findByUserEvent(userId, eventId, tx);
+
+        if (existing) {
+          if (existing.status === "CANCELLED") {
+            // Flip back to CONFIRMED — same transaction, same capacity check
+            return bookingRepo.reactivate(existing.id, tx);
+          }
+
+          if (existing.status === "CONFIRMED") {
+            // Duplicate — let the unique constraint fire → P2002 → 409
+            throw new HttpError(409, "This user already has a booking for this event");
+          }
+
+          // WAITLISTED — leave alone (Session 5's job)
+          throw new HttpError(409, "Booking already exists (waitlisted)");
+        }
+
+        // 3. No existing row — create new CONFIRMED booking
+        return bookingRepo.create(userId, eventId, tx);
+      },
+      {
+        isolationLevel: "Serializable",
+      },
+    );
+
+    return booking;
+  } catch (error) {
+    // Re-throw HttpError as-is
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
+    // P2002 = unique constraint violation → 409
+    const prismaError = error as Prisma.PrismaClientKnownRequestError;
+    if (prismaError.code === "P2002") {
+      throw new HttpError(409, "This user already has a booking for this event");
+    }
+    // P2034 = serialization failure → rethrow (stretch: retry loop)
+    if (prismaError.code === "P2034") {
+      throw error;
+    }
+
+    throw error;
   }
-
-  const confirmedCount = getConfirmedCountForEvent(eventId);
-
-  if (confirmedCount >= event.capacity) {
-    throw new HttpError(409, "Event at capacity");
-  }
-
-  const booking: Booking = {
-    id: randomUUID(),
-    userId: currentUserId,
-    eventId,
-    status: "CONFIRMED",
-    createdAt: new Date().toISOString(),
-  };
-
-  bookings.set(booking.id, booking);
-
-  return booking;
 }
 
-export function getBookingById(id: string): Booking {
-  const booking = bookings.get(id);
+export async function getBookingById(id: string) {
+  const booking = await bookingRepo.getById(id);
 
   if (!booking) {
-    throw new HttpError(404, "Unknown booking id");
+    throw new HttpError(404, "Booking not found");
   }
 
   return booking;
 }
 
-export function cancelBooking(id: string): Booking {
-  const booking = getBookingById(id);
+export async function cancelBooking(id: string) {
+  const booking = await getBookingById(id);
 
-  const cancelled: Booking = {
-    ...booking,
-    status: "CANCELLED" as BookingStatus,
-  };
+  if (booking.status === "CANCELLED") {
+    throw new HttpError(409, "Booking is already cancelled");
+  }
 
-  bookings.set(id, cancelled);
-
-  return cancelled;
+  return bookingRepo.cancel(id);
 }

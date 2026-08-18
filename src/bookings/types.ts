@@ -1,13 +1,8 @@
-export type BookingStatus = "CONFIRMED" | "CANCELLED" | "WAITLISTED";
-
-export type Booking = {
-  id: string;
-  userId: string;
-  eventId: string;
-  status: BookingStatus;
-  createdAt: string;
-};
+// Types are now derived from Prisma. Re-export for convenience.
+export type { Booking } from "../generated/prisma/client.ts";
+export { BookingStatus } from "../generated/prisma/client.ts";
 
 export type CreateBookingInput = {
+  userId: string;
   eventId: string;
 };
