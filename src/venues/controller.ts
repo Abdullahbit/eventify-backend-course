@@ -22,7 +22,7 @@ export async function createVenue(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const venue = venueService.createVenue(req.body);
+    const venue = await venueService.createVenue(req.body);
     res.status(201).json(venue);
   } catch (error) {
     next(error);
@@ -37,7 +37,7 @@ export async function listVenues(
   try {
     const validatedQuery = req.validatedQuery ?? {};
     const limit = typeof validatedQuery.limit === "number" ? validatedQuery.limit : undefined;
-    const venues = venueService.listVenues(limit);
+    const venues = await venueService.listVenues(limit);
     res.status(200).json(venues);
   } catch (error) {
     next(error);
@@ -51,7 +51,7 @@ export async function getVenue(
 ): Promise<void> {
   try {
     const venueId = getVenueId(req);
-    const venue = venueService.getVenueById(venueId);
+    const venue = await venueService.getVenueById(venueId);
     res.status(200).json(venue);
   } catch (error) {
     next(error);
@@ -65,7 +65,7 @@ export async function updateVenue(
 ): Promise<void> {
   try {
     const venueId = getVenueId(req);
-    const venue = venueService.updateVenue(venueId, req.body);
+    const venue = await venueService.updateVenue(venueId, req.body);
     res.status(200).json(venue);
   } catch (error) {
     next(error);
@@ -79,7 +79,7 @@ export async function deleteVenue(
 ): Promise<void> {
   try {
     const venueId = getVenueId(req);
-    const venue = venueService.deleteVenue(venueId);
+    const venue = await venueService.deleteVenue(venueId);
     res.status(200).json(venue);
   } catch (error) {
     next(error);

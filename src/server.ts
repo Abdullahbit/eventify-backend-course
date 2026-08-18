@@ -1,12 +1,13 @@
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
-import bookingRoutes from "./bookings/routes.ts";
+import { env } from "./config.ts";
 import { HttpError } from "./http/HttpError.ts";
+import bookingRoutes from "./bookings/routes.ts";
 import eventRoutes from "./events/routes.ts";
 import venueRoutes from "./venues/routes.ts";
 
 const app = express();
-const port = 3000;
+const port = env.PORT;
 
 app.use(express.json());
 

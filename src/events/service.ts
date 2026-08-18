@@ -1,52 +1,46 @@
-import { readFile } from "node:fs/promises";
-import type { Event } from "../domain.ts";
-import type { EventQuery } from "./types.ts";
+import { HttpError } from "../http/HttpError.ts";
+import * as eventRepo from "./repository.ts";
+import type { EventCreateInput, EventUpdateInput } from "./repository.ts";
 
-const eventsFilePath = "data/events.json";
-
-let cachedEvents: Event[] | null = null;
-
-async function loadEvents(): Promise<Event[]> {
-  if (cachedEvents) {
-    return cachedEvents;
-  }
-
-  const file = await readFile(eventsFilePath, "utf-8");
-  cachedEvents = JSON.parse(file) as Event[];
-  return cachedEvents;
+export async function createEvent(input: EventCreateInput) {
+  return eventRepo.create(input);
 }
 
-export async function listEvents(query: EventQuery): Promise<{ data: Event[]; page: number; limit: number; total: number }> {
-  const events = await loadEvents();
+export async function listEvents(query: {
+  page?: number;
+  limit?: number;
+  venue?: string;
+  from?: string;
+  to?: string;
+}): Promise<{ data: unknown[]; page: number; limit: number; total: number }> {
   const page = query.page ?? 1;
   const limit = query.limit ?? 20;
 
-  const filtered = events.filter((event) => {
-    if (query.venue !== undefined && event.venue !== query.venue) {
-      return false;
-    }
-
-    if (query.from !== undefined && new Date(event.startsAt) < new Date(query.from)) {
-      return false;
-    }
-
-    if (query.to !== undefined && new Date(event.startsAt) > new Date(query.to)) {
-      return false;
-    }
-
-    return true;
+  const { data, total } = await eventRepo.list(page, limit, {
+    venue: query.venue,
+    from: query.from,
+    to: query.to,
   });
 
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * limit;
-  const end = start + limit;
+  return { data, page, limit, total };
+}
 
-  return {
-    data: filtered.slice(start, end),
-    page: safePage,
-    limit,
-    total,
-  };
+export async function getEventById(id: string) {
+  const event = await eventRepo.getById(id);
+
+  if (!event) {
+    throw new HttpError(404, "Event not found");
+  }
+
+  return event;
+}
+
+export async function updateEvent(id: string, input: EventUpdateInput) {
+  await getEventById(id);
+  return eventRepo.update(id, input);
+}
+
+export async function deleteEvent(id: string) {
+  await getEventById(id);
+  return eventRepo.remove(id);
 }
