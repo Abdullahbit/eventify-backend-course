@@ -1,0 +1,27 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "eventId": "REPLACE_WITH_SEED_OUTPUT",
+  "capacity": 5,
+  "users": [
+    { "userId": "REPLACE_1", "token": "" },
+    { "userId": "REPLACE_2", "token": "" },
+    { "userId": "REPLACE_3", "token": "" },
+    { "userId": "REPLACE_4", "token": "" },
+    { "userId": "REPLACE_5", "token": "" },
+    { "userId": "REPLACE_6", "token": "" },
+    { "userId": "REPLACE_7", "token": "" },
+    { "userId": "REPLACE_8", "token": "" },
+    { "userId": "REPLACE_9", "token": "" },
+    { "userId": "REPLACE_10", "token": "" },
+    { "userId": "REPLACE_11", "token": "" },
+    { "userId": "REPLACE_12", "token": "" },
+    { "userId": "REPLACE_13", "token": "" },
+    { "userId": "REPLACE_14", "token": "" },
+    { "userId": "REPLACE_15", "token": "" },
+    { "userId": "REPLACE_16", "token": "" },
+    { "userId": "REPLACE_17", "token": "" },
+    { "userId": "REPLACE_18", "token": "" },
+    { "userId": "REPLACE_19", "token": "" },
+    { "userId": "REPLACE_20", "token": "" }
+  ]
+}
