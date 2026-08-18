@@ -1,0 +1,82 @@
+// Eventify Prisma schema (Session 3).
+// Generator: prisma-client (Prisma 7) with output inside the source tree.
+// Datasource below uses PostgreSQL. The @prisma/adapter-pg driver adapter is
+// required at runtime (see src/db.ts). Prisma 7 does NOT auto-load .env.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ATTENDEE
+  ORGANIZER
+  ADMIN
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  WAITLISTED
+}
+
+model User {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  email     String   @unique
+  role      Role     @default(ATTENDEE)
+  createdAt DateTime @default(now())
+
+  bookings Booking[]
+  events   Event[]
+}
+
+model Event {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  title       String
+  description String
+  venue       String?
+  startsAt    DateTime
+  capacity    Int
+  priceCents  Int      @default(0)
+  organizerId String   @db.Uuid
+  organizer   User     @relation(fields: [organizerId], references: [id])
+  createdAt   DateTime @default(now())
+
+  bookings  Booking[]
+
+  @@index([startsAt])
+}
+
+model Venue {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  name         String   @unique
+  address      String
+  capacity     Int
+  contactEmail String
+  createdAt    DateTime @default(now())
+}
+
+model Booking {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  userId    String        @db.Uuid
+  eventId   String        @db.Uuid
+  status    BookingStatus @default(CONFIRMED)
+  createdAt DateTime      @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+
+  // One booking row per (user, event). A returning user can never get a
+  // second row; the CANCELLED row is flipped back instead of re-inserted.
+  @@unique([userId, eventId])
+
+  // Hot path: the transactional capacity check counts CONFIRMED rows per
+  // event. This index lets Postgres satisfy that count with an index scan
+  // instead of a sequential scan (see Task 4 in the PR body).
+  @@index([eventId, status])
+}

@@ -1,0 +1,23 @@
+# Local PostgreSQL for Eventify (Session 3+).
+#   docker compose up -d
+# matches DATABASE_URL in .env.example.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: eventify-postgres
+    environment:
+      POSTGRES_USER: eventify
+      POSTGRES_PASSWORD: eventify
+      POSTGRES_DB: eventify
+    ports:
+      - "5432:5432"
+    volumes:
+      - eventify-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventify -d eventify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  eventify-pg-data:
