@@ -5,6 +5,28 @@ import * as bookingRepo from "./repository.ts";
 import * as eventRepo from "../events/repository.ts";
 
 /**
+ * A serialization failure means Postgres aborted this transaction because
+ * concurrent writers collided (SQLSTATE 40001 / "could not serialize
+ * access"). The correct response is to RETRY the whole transaction.
+ *
+ * Prisma can surface this two ways:
+ *  - its own code `P2034`, or
+ *  - via the pg driver adapter as a `DriverAdapterError` whose `cause`
+ *    carries `originalCode: "40001"` / `kind: "TransactionWriteConflict"`.
+ * We match both so the retry loop actually fires.
+ */
+function isSerializationFailure(error: unknown): boolean {
+  const e = error as {
+    code?: string;
+    cause?: { originalCode?: string; kind?: string };
+  };
+  if (e?.code === "P2034" || e?.code === "40001") return true;
+  if (e?.cause?.originalCode === "40001") return true;
+  if (e?.cause?.kind === "TransactionWriteConflict") return true;
+  return false;
+}
+
+/**
  * Transactional booking creation.
  *
  * Runs inside prisma.$transaction with Serializable isolation.
@@ -19,61 +41,74 @@ export async function createBooking(userId: string, eventId: string) {
     throw new HttpError(404, "Unknown eventId");
   }
 
-  try {
-    const booking = await prisma.$transaction(
-      async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
-        // 1. Capacity check — count only CONFIRMED bookings
-        const confirmedCount = await bookingRepo.countConfirmed(eventId, tx);
+  // The whole race-safe flow runs inside a Serializable transaction.
+  // Serializable can abort transactions with a serialization failure
+  // (P2034) when many writers collide. The correct response is to RETRY
+  // the whole transaction — so we wrap it in a bounded retry loop.
+  const MAX_RETRIES = 8;
+  let lastError: unknown;
 
-        if (confirmedCount >= event.capacity) {
-          throw new HttpError(409, "Event at capacity");
-        }
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await prisma.$transaction(
+        async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
+          // 1. Capacity check — count only CONFIRMED bookings
+          const confirmedCount = await bookingRepo.countConfirmed(eventId, tx);
 
-        // 2. Look for an existing booking row (handles rebooking)
-        const existing = await bookingRepo.findByUserEvent(userId, eventId, tx);
-
-        if (existing) {
-          if (existing.status === "CANCELLED") {
-            // Flip back to CONFIRMED — same transaction, same capacity check
-            return bookingRepo.reactivate(existing.id, tx);
+          if (confirmedCount >= event.capacity) {
+            throw new HttpError(409, "Event at capacity");
           }
 
-          if (existing.status === "CONFIRMED") {
-            // Duplicate — let the unique constraint fire → P2002 → 409
-            throw new HttpError(409, "This user already has a booking for this event");
+          // 2. Look for an existing booking row (handles rebooking)
+          const existing = await bookingRepo.findByUserEvent(userId, eventId, tx);
+
+          if (existing) {
+            if (existing.status === "CANCELLED") {
+              // Flip back to CONFIRMED — same transaction, same capacity check
+              return bookingRepo.reactivate(existing.id, tx);
+            }
+
+            if (existing.status === "CONFIRMED") {
+              // Duplicate — let the unique constraint fire → P2002 → 409
+              throw new HttpError(409, "This user already has a booking for this event");
+            }
+
+            // WAITLISTED — leave alone (Session 5's job)
+            throw new HttpError(409, "Booking already exists (waitlisted)");
           }
 
-          // WAITLISTED — leave alone (Session 5's job)
-          throw new HttpError(409, "Booking already exists (waitlisted)");
-        }
+          // 3. No existing row — create new CONFIRMED booking
+          return bookingRepo.create(userId, eventId, tx);
+        },
+        {
+          isolationLevel: "Serializable",
+        },
+      );
+    } catch (error) {
+      // Business/validation errors must NOT be retried.
+      if (error instanceof HttpError) {
+        throw error;
+      }
 
-        // 3. No existing row — create new CONFIRMED booking
-        return bookingRepo.create(userId, eventId, tx);
-      },
-      {
-        isolationLevel: "Serializable",
-      },
-    );
+      const prismaError = error as Prisma.PrismaClientKnownRequestError;
 
-    return booking;
-  } catch (error) {
-    // Re-throw HttpError as-is
-    if (error instanceof HttpError) {
+      // P2002 = unique constraint violation → 409 (final, no retry)
+      if (prismaError.code === "P2002") {
+        throw new HttpError(409, "This user already has a booking for this event");
+      }
+
+      // Serialization failure (40001 / P2034) → retry the whole transaction.
+      if (isSerializationFailure(error)) {
+        lastError = error;
+        continue;
+      }
+
+      // Any other unexpected error — don't retry.
       throw error;
     }
-
-    // P2002 = unique constraint violation → 409
-    const prismaError = error as Prisma.PrismaClientKnownRequestError;
-    if (prismaError.code === "P2002") {
-      throw new HttpError(409, "This user already has a booking for this event");
-    }
-    // P2034 = serialization failure → rethrow (stretch: retry loop)
-    if (prismaError.code === "P2034") {
-      throw error;
-    }
-
-    throw error;
   }
+
+  throw lastError ?? new HttpError(500, "Booking failed after retries");
 }
 
 export async function getBookingById(id: string) {

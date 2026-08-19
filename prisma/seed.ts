@@ -10,6 +10,7 @@
  * Uses upsert so it can run multiple times without duplicates.
  */
 import "dotenv/config";
+import { resolve } from "node:path";
 import { PrismaClient } from "../src/generated/prisma/client.ts";
 import { PrismaPg } from "@prisma/adapter-pg";
 
@@ -69,10 +70,10 @@ async function main() {
 
   // --- Events ---
   const event1 = await prisma.event.upsert({
-    where: { id: "evt-music-fest-001" },
+    where: { id: "1f4a1a1a-0000-4000-8000-000000000001" },
     update: {},
     create: {
-      id: "evt-music-fest-001",
+      id: "1f4a1a1a-0000-4000-8000-000000000001",
       title: "Music Festival 2025",
       description: "A weekend of live music and art.",
       venue: "Central Park",
@@ -84,10 +85,10 @@ async function main() {
   });
 
   const event2 = await prisma.event.upsert({
-    where: { id: "evt-tech-conf-002" },
+    where: { id: "1f4a1a1a-0000-4000-8000-000000000002" },
     update: {},
     create: {
-      id: "evt-tech-conf-002",
+      id: "1f4a1a1a-0000-4000-8000-000000000002",
       title: "Tech Conference 2025",
       description: "The latest in web development and AI.",
       venue: "Convention Center",
@@ -99,10 +100,10 @@ async function main() {
   });
 
   await prisma.event.upsert({
-    where: { id: "evt-food-expo-003" },
+    where: { id: "1f4a1a1a-0000-4000-8000-000000000003" },
     update: {},
     create: {
-      id: "evt-food-expo-003",
+      id: "1f4a1a1a-0000-4000-8000-000000000003",
       title: "Food Expo 2025",
       description: "Taste dishes from top chefs around the world.",
       venue: "Downtown Hall",
@@ -114,10 +115,10 @@ async function main() {
   });
 
   await prisma.event.upsert({
-    where: { id: "evt-yoga-retreat-004" },
+    where: { id: "1f4a1a1a-0000-4000-8000-000000000004" },
     update: {},
     create: {
-      id: "evt-yoga-retreat-004",
+      id: "1f4a1a1a-0000-4000-8000-000000000004",
       title: "Yoga Retreat",
       description: "A day of mindfulness and relaxation.",
       venue: "Seaside Resort",
@@ -130,10 +131,10 @@ async function main() {
 
   // Capacity-5 event for the concurrency test
   const capacityEvent = await prisma.event.upsert({
-    where: { id: "evt-capacity-test-005" },
+    where: { id: "1f4a1a1a-0000-4000-8000-000000000005" },
     update: {},
     create: {
-      id: "evt-capacity-test-005",
+      id: "1f4a1a1a-0000-4000-8000-000000000005",
       title: "Capacity Test Event",
       description: "Capacity 5 — used by the parallel-bookings concurrency script.",
       venue: "Test Lab",
@@ -170,6 +171,20 @@ async function main() {
   for (const user of parallelUsers) {
     console.log(`     ${user.id}`);
   }
+
+  // --- Write the parallel-bookings fixture with the REAL ids ---
+  // (20 user uuids + the capacity-test event uuid) so the concurrency
+  // script never has to be hand-edited after a re-seed.
+  const fixture = {
+    baseUrl: "http://localhost:3000",
+    eventId: capacityEvent.id,
+    capacity: capacityEvent.capacity,
+    users: parallelUsers.map((u) => ({ userId: u.id, token: "" })),
+  };
+  const { writeFile } = await import("node:fs/promises");
+  const fixturePath = resolve(process.cwd(), "scripts", "fixtures", "parallel-users.json");
+  await writeFile(fixturePath, JSON.stringify(fixture, null, 2) + "\n", "utf-8");
+  console.log(`\n💾 Wrote parallel-bookings fixture: ${fixturePath}`);
 
   console.log("\n✅ Seed complete!");
 }

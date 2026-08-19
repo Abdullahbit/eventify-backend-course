@@ -1,27 +1,87 @@
 {
   "baseUrl": "http://localhost:3000",
-  "eventId": "REPLACE_WITH_SEED_OUTPUT",
+  "eventId": "1f4a1a1a-0000-4000-8000-000000000005",
   "capacity": 5,
   "users": [
-    { "userId": "REPLACE_1", "token": "" },
-    { "userId": "REPLACE_2", "token": "" },
-    { "userId": "REPLACE_3", "token": "" },
-    { "userId": "REPLACE_4", "token": "" },
-    { "userId": "REPLACE_5", "token": "" },
-    { "userId": "REPLACE_6", "token": "" },
-    { "userId": "REPLACE_7", "token": "" },
-    { "userId": "REPLACE_8", "token": "" },
-    { "userId": "REPLACE_9", "token": "" },
-    { "userId": "REPLACE_10", "token": "" },
-    { "userId": "REPLACE_11", "token": "" },
-    { "userId": "REPLACE_12", "token": "" },
-    { "userId": "REPLACE_13", "token": "" },
-    { "userId": "REPLACE_14", "token": "" },
-    { "userId": "REPLACE_15", "token": "" },
-    { "userId": "REPLACE_16", "token": "" },
-    { "userId": "REPLACE_17", "token": "" },
-    { "userId": "REPLACE_18", "token": "" },
-    { "userId": "REPLACE_19", "token": "" },
-    { "userId": "REPLACE_20", "token": "" }
+    {
+      "userId": "01a0175b-359b-718b-a007-8dd93eb48ff0",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35a0-774d-a3df-96ca49fa83da",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35a4-7451-9914-82540ad2fe4a",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35a8-76ac-a922-5b4e62e08b16",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35ac-77ba-82d1-6e4d4c01b6e8",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35b0-758d-8975-d84f36da4c17",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35b5-76d2-8ade-7ede0ca1cb68",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35ba-728e-8847-92e44954ce6a",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35bd-778b-a167-1ed5e7c4a38a",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35c2-705e-8844-398a8383738c",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35c5-74ab-8b4c-98a078fd5629",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35ca-72c5-ba9e-5e284191c077",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35ce-7791-aabb-67c7d2aa5ddf",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35d2-7308-a058-3793c627ce67",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35d6-76f9-8127-6ab4c7211eca",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35d9-716d-9177-1b3b8d4708e7",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35de-772b-989e-f6cdde4cbef4",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35e1-710f-b4ba-ac0ef80ddccf",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35e6-728a-9fae-f55820fe4e5d",
+      "token": ""
+    },
+    {
+      "userId": "01a0175b-35e9-74e9-9722-046ddd147dd2",
+      "token": ""
+    }
   ]
 }
