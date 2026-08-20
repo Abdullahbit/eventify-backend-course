@@ -2,15 +2,21 @@ import type { NextFunction, Request, Response } from "express";
 import * as bookingService from "./service.ts";
 import { HttpError } from "../http/HttpError.ts";
 
-// Session 4 will read the authenticated user from the JWT instead of the body.
+// Session 4: the booking is created for the authenticated user (req.user.sub),
+// not a body-supplied userId (prevents booking on behalf of another user).
 export async function createBooking(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const userId = req.body.userId;
-    const booking = await bookingService.createBooking(userId, req.body.eventId);
+    if (!req.user) {
+      throw new HttpError(401, "Authentication required");
+    }
+    const booking = await bookingService.createBooking(
+      req.user.sub,
+      req.body.eventId,
+    );
     res.status(201).json(booking);
   } catch (error) {
     next(error);
@@ -45,8 +51,14 @@ export async function cancelBooking(
     if (typeof bookingId !== "string" || bookingId.length === 0) {
       throw new HttpError(400, "Booking id is required");
     }
+    if (!req.user) {
+      throw new HttpError(401, "Authentication required");
+    }
 
-    const booking = await bookingService.cancelBooking(bookingId);
+    const booking = await bookingService.cancelBooking(bookingId, {
+      sub: req.user.sub,
+      role: req.user.role,
+    });
     res.status(200).json(booking);
   } catch (error) {
     next(error);

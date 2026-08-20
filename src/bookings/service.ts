@@ -1,8 +1,12 @@
 import { prisma } from "../db.ts";
 import { Prisma } from "../generated/prisma/client.ts";
 import { HttpError } from "../http/HttpError.ts";
+import type { Role } from "../domain.ts";
 import * as bookingRepo from "./repository.ts";
 import * as eventRepo from "../events/repository.ts";
+
+// The authenticated principal performing a mutating action.
+type Actor = { sub: string; role: Role };
 
 /**
  * A serialization failure means Postgres aborted this transaction because
@@ -121,8 +125,13 @@ export async function getBookingById(id: string) {
   return booking;
 }
 
-export async function cancelBooking(id: string) {
+export async function cancelBooking(id: string, actor: Actor) {
   const booking = await getBookingById(id);
+
+  // BOLA guard: only the booking owner (or an ADMIN) may cancel it.
+  if (actor.role !== "ADMIN" && booking.userId !== actor.sub) {
+    throw new HttpError(403, "You do not have permission to cancel this booking");
+  }
 
   if (booking.status === "CANCELLED") {
     throw new HttpError(409, "Booking is already cancelled");

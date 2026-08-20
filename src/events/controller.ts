@@ -60,8 +60,14 @@ export async function updateEvent(
     if (typeof eventId !== "string" || eventId.length === 0) {
       throw new HttpError(400, "Event id is required");
     }
+    if (!req.user) {
+      throw new HttpError(401, "Authentication required");
+    }
 
-    const event = await eventService.updateEvent(eventId, req.body);
+    const event = await eventService.updateEvent(eventId, req.body, {
+      sub: req.user.sub,
+      role: req.user.role,
+    });
     res.status(200).json(event);
   } catch (error) {
     next(error);
@@ -78,8 +84,14 @@ export async function deleteEvent(
     if (typeof eventId !== "string" || eventId.length === 0) {
       throw new HttpError(400, "Event id is required");
     }
+    if (!req.user) {
+      throw new HttpError(401, "Authentication required");
+    }
 
-    const event = await eventService.deleteEvent(eventId);
+    const event = await eventService.deleteEvent(eventId, {
+      sub: req.user.sub,
+      role: req.user.role,
+    });
     res.status(200).json(event);
   } catch (error) {
     next(error);

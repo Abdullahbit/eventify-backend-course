@@ -33,6 +33,9 @@ model User {
 
   bookings Booking[]
   events   Event[]
+
+  // Session 4: each user owns a chain of refresh tokens (refresh rotation).
+  refreshTokens RefreshToken[]
 }
 
 model Event {
@@ -80,3 +83,53 @@ model Booking {
   // instead of a sequential scan (see Task 4 in the PR body).
   @@index([eventId, status])
 }
+
+// Session 4 starter - the RefreshToken model (homework task 3).
+//
+// Paste this block into prisma/schema.prisma, add the back-relation to your
+// existing User model (see the bottom of this file), then run:
+//
+//   npx prisma migrate dev --name add-refresh-token
+//
+// prisma/migration.sql in this starter shows the SQL that migration should
+// produce - read it and check they match. Reminder: Prisma 7 does not
+// auto-load .env, so run migrate the way you configured in prisma.config.ts.
+
+model RefreshToken {
+  id           String    @id @default(uuid(7)) @db.Uuid
+
+  // sha256 hex of the opaque token. The raw 32-byte base64url token exists
+  // only in the httpOnly cookie - if this table leaks, the attacker still
+  // holds nothing presentable. Unique so a hash lookup is the primary access
+  // path (and gets its index for free).
+  tokenHash    String    @unique
+
+  userId       String    @db.Uuid
+
+  // Hard upper bound on the token's life (7 days at issue time). Expired
+  // tokens must fail refresh even if never rotated.
+  expiresAt    DateTime
+
+  // Set the moment this token is rotated (or explicitly logged out). A
+  // revoked token that shows up again is the reuse/theft signal - 401, and
+  // (STRETCH) revoke the whole family.
+  revokedAt    DateTime?
+
+  // Rotation chain: which token replaced this one. Nullable self-relation -
+  // the newest token in a family has no successor yet. Reuse detection
+  // (STRETCH) follows this chain to revoke the entire family.
+  replacedById String?   @unique @db.Uuid
+
+  createdAt    DateTime  @default(now())
+
+  user         User          @relation(fields: [userId], references: [id])
+  replacedBy   RefreshToken? @relation("RotationChain", fields: [replacedById], references: [id])
+  replaces     RefreshToken? @relation("RotationChain")
+
+  // Lookups by user (logout-everywhere, family revocation) should not seq-scan.
+  @@index([userId])
+}
+
+// Add this back-relation line inside your existing User model:
+//
+//   refreshTokens RefreshToken[]

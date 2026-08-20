@@ -10,8 +10,18 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+
+  // Session 4 auth secrets / config. Read ONLY through this module — never
+  // touch `process.env` directly in app code.
+  JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
+  WEB_ORIGIN: z.string().url("WEB_ORIGIN must be a valid URL (e.g. http://localhost:3000)"),
 });
 
 export type Env = z.infer<typeof envSchema>;
 
 export const env: Env = envSchema.parse(process.env);
+
+// `config` is the canonical accessor used by auth code
+// (config.JWT_ACCESS_SECRET, config.WEB_ORIGIN). It is the same parsed object
+// as `env` so existing imports keep working.
+export const config = env;
