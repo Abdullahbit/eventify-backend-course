@@ -1,22 +1,22 @@
 # Session 2 Homework Checklist
 
-- [ ] Task 1: Implement In-Memory `/v1/bookings` CRUD resource
-  - [ ] Define Booking domain schemas in Zod (Zod body validation)
-  - [ ] Create Booking Service (`bookings.service.ts`) with in-memory Map store
-  - [ ] Implement service-level business rules (uniqueness check & capacity check)
-  - [ ] Create Booking Controller (`bookings.controller.ts`) using standard Express patterns
-  - [ ] Setup Bookings Routes (`bookings.routes.ts`) mapping HTTP paths to controllers
-  - [ ] Mount bookings routes to the Express app in `server.ts`
-- [ ] Task 2: Implement Pagination on `GET /v1/events`
-  - [ ] Define page & limit schemas in `events.schema.ts`
-  - [ ] Ensure `validateQuery` stores parsed query values in `res.locals.query`
-  - [ ] Update Events Controller and Service to use coerced page & limit numbers
-  - [ ] Wrap events endpoint response in the `{ data, page, limit, total }` envelope
-- [ ] Task 3: Implement Filtering on `GET /v1/events`
-  - [ ] Define venue, from, and to fields in Zod query schema
-  - [ ] Filter events by venue, from date, and to date before pagination slicing
-- [ ] Task 4: Consistency Pass
-  - [ ] Ensure all input validation goes through `validate` or `validateQuery`
-  - [ ] Verify all errors are thrown as `HttpError`
-  - [ ] Ensure zero hand-written `res.status(500)` or raw status calls outside error middleware
-  - [ ] Run quality gates (`npm run typecheck` and `npm run lint`)
+- [x] Task 1: Implement In-Memory `/v1/bookings` CRUD resource
+  - [x] Define Booking domain schemas in Zod (Zod body validation)
+  - [x] Create Booking Service (`bookings.service.ts`) with in-memory Map store
+  - [x] Implement service-level business rules (uniqueness check & capacity check)
+  - [x] Create Booking Controller (`bookings.controller.ts`) using standard Express patterns
+  - [x] Setup Bookings Routes (`bookings.routes.ts`) mapping HTTP paths to controllers
+  - [x] Mount bookings routes to the Express app in `server.ts`
+- [x] Task 2: Implement Pagination on `GET /v1/events`
+  - [x] Define page & limit schemas in `events.schema.ts`
+  - [x] Ensure `validateQuery` stores parsed query values in `res.locals.query`
+  - [x] Update Events Controller and Service to use coerced page & limit numbers
+  - [x] Wrap events endpoint response in the `{ data, page, limit, total }` envelope
+- [x] Task 3: Implement Filtering on `GET /v1/events`
+  - [x] Define venue, from, and to fields in Zod query schema
+  - [x] Filter events by venue, from date, and to date before pagination slicing
+- [x] Task 4: Consistency Pass
+  - [x] Ensure all input validation goes through `validate` or `validateQuery`
+  - [x] Verify all errors are thrown as `HttpError`
+  - [x] Ensure zero hand-written `res.status(500)` or raw status calls outside error middleware
+  - [x] Run quality gates (`npm run typecheck` and `npm run lint`)
