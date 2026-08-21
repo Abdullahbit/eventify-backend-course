@@ -1,6 +1,22 @@
-- [x] Task 1: Update domain types in `src/domain.ts` and add `findById`
-- [x] Task 2: Create local seed data file at `data/events.json`
-- [x] Task 3: Build the base server in `src/server.ts` with `/health` and 404 routing
-- [x] Task 4: Load events dynamically from `data/events.json` (lazy loading & error safety)
-- [x] Task 5: Implement `GET /events/:id` path-splitting logic
-- [x] Task 6: Verify with typecheck, lint, and curls
+# Session 2 Homework Checklist
+
+- [ ] Task 1: Implement In-Memory `/v1/bookings` CRUD resource
+  - [ ] Define Booking domain schemas in Zod (Zod body validation)
+  - [ ] Create Booking Service (`bookings.service.ts`) with in-memory Map store
+  - [ ] Implement service-level business rules (uniqueness check & capacity check)
+  - [ ] Create Booking Controller (`bookings.controller.ts`) using standard Express patterns
+  - [ ] Setup Bookings Routes (`bookings.routes.ts`) mapping HTTP paths to controllers
+  - [ ] Mount bookings routes to the Express app in `server.ts`
+- [ ] Task 2: Implement Pagination on `GET /v1/events`
+  - [ ] Define page & limit schemas in `events.schema.ts`
+  - [ ] Ensure `validateQuery` stores parsed query values in `res.locals.query`
+  - [ ] Update Events Controller and Service to use coerced page & limit numbers
+  - [ ] Wrap events endpoint response in the `{ data, page, limit, total }` envelope
+- [ ] Task 3: Implement Filtering on `GET /v1/events`
+  - [ ] Define venue, from, and to fields in Zod query schema
+  - [ ] Filter events by venue, from date, and to date before pagination slicing
+- [ ] Task 4: Consistency Pass
+  - [ ] Ensure all input validation goes through `validate` or `validateQuery`
+  - [ ] Verify all errors are thrown as `HttpError`
+  - [ ] Ensure zero hand-written `res.status(500)` or raw status calls outside error middleware
+  - [ ] Run quality gates (`npm run typecheck` and `npm run lint`)
