@@ -7,7 +7,7 @@ export class BookingsController {
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { eventId } = req.body;
-      const userId = (req.headers['x-user-id'] as string) || 'usr-1';
+      const userId = (req.headers['x-user-id'] as string) || '00000000-0000-0000-0000-000000000001';
       const booking = await BookingsService.create(eventId, userId);
       res.status(201).json(booking);
     } catch (error) {

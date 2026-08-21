@@ -1,59 +1,61 @@
 import type { Request, Response, NextFunction } from 'express';
 import { VenuesService } from './venues.service.ts';
+import { HttpError } from '../errors.ts';
 
 export class VenuesController {
-  static create(req: Request, res: Response, next: NextFunction): void {
+  static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const venue = VenuesService.create(req.body);
+      const venue = await VenuesService.create(req.body);
       res.status(201).json(venue);
     } catch (error) {
       next(error);
     }
   }
 
-  static list(req: Request, res: Response, next: NextFunction): void {
+  static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : undefined;
-      const venues = VenuesService.list(limit);
+      const query = res.locals.query as { limit?: number } | undefined;
+      const limit = query?.limit;
+      const venues = await VenuesService.list(limit);
       res.status(200).json(venues);
     } catch (error) {
       next(error);
     }
   }
 
-  static getById(req: Request, res: Response, next: NextFunction): void {
+  static async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id;
       if (!id || typeof id !== 'string') {
-        throw new Error('Invalid ID');
+        throw new HttpError(400, 'Invalid ID');
       }
-      const venue = VenuesService.getById(id);
+      const venue = await VenuesService.getById(id);
       res.status(200).json(venue);
     } catch (error) {
       next(error);
     }
   }
 
-  static update(req: Request, res: Response, next: NextFunction): void {
+  static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id;
       if (!id || typeof id !== 'string') {
-        throw new Error('Invalid ID');
+        throw new HttpError(400, 'Invalid ID');
       }
-      const venue = VenuesService.update(id, req.body);
+      const venue = await VenuesService.update(id, req.body);
       res.status(200).json(venue);
     } catch (error) {
       next(error);
     }
   }
 
-  static delete(req: Request, res: Response, next: NextFunction): void {
+  static async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id;
       if (!id || typeof id !== 'string') {
-        throw new Error('Invalid ID');
+        throw new HttpError(400, 'Invalid ID');
       }
-      VenuesService.delete(id);
+      await VenuesService.delete(id);
       res.status(204).end();
     } catch (error) {
       next(error);
