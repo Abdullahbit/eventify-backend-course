@@ -29,11 +29,7 @@ export function validate(schema: z.ZodTypeAny) {
 export function validateQuery(schema: z.ZodTypeAny) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const parsed = await schema.parseAsync(req.query);
-      for (const key of Object.keys(req.query)) {
-        delete req.query[key];
-      }
-      Object.assign(req.query, parsed);
+      res.locals.query = await schema.parseAsync(req.query);
       next();
     } catch (error) {
       console.error('Validation Query Error:', error);
