@@ -1,22 +1,29 @@
-# Session 2 Homework Checklist
+# Session 3 Homework Checklist — Bookings That Survive a Restart
 
-- [x] Task 1: Implement In-Memory `/v1/bookings` CRUD resource
-  - [x] Define Booking domain schemas in Zod (Zod body validation)
-  - [x] Create Booking Service (`bookings.service.ts`) with in-memory Map store
-  - [x] Implement service-level business rules (uniqueness check & capacity check)
-  - [x] Create Booking Controller (`bookings.controller.ts`) using standard Express patterns
-  - [x] Setup Bookings Routes (`bookings.routes.ts`) mapping HTTP paths to controllers
-  - [x] Mount bookings routes to the Express app in `server.ts`
-- [x] Task 2: Implement Pagination on `GET /v1/events`
-  - [x] Define page & limit schemas in `events.schema.ts`
-  - [x] Ensure `validateQuery` stores parsed query values in `res.locals.query`
-  - [x] Update Events Controller and Service to use coerced page & limit numbers
-  - [x] Wrap events endpoint response in the `{ data, page, limit, total }` envelope
-- [x] Task 3: Implement Filtering on `GET /v1/events`
-  - [x] Define venue, from, and to fields in Zod query schema
-  - [x] Filter events by venue, from date, and to date before pagination slicing
-- [x] Task 4: Consistency Pass
-  - [x] Ensure all input validation goes through `validate` or `validateQuery`
-  - [x] Verify all errors are thrown as `HttpError`
-  - [x] Ensure zero hand-written `res.status(500)` or raw status calls outside error middleware
-  - [x] Run quality gates (`npm run typecheck` and `npm run lint`)
+- [x] Task 1: Setup Prisma and Postgres Infrastructure
+  - [x] Add Prisma and PostgreSQL dependencies to `package.json` and install
+  - [x] Create `prisma/schema.prisma` mapping class domain requirements
+  - [x] Create `prisma.config.ts` loading Prisma 7 environment parameters
+  - [x] Configure `docker-compose.yml` and spin up local Postgres + Redis
+  - [x] Setup `src/db.ts` to expose the Prisma Client with PG Driver Adapter
+- [x] Task 2: Create Database Repositories
+  - [x] Create Venues Repository (`src/venues/repository.ts`)
+  - [x] Create Events Repository (`src/events/repository.ts`)
+  - [x] Create Bookings Repository (`src/bookings/repository.ts`)
+- [x] Task 3: Migrate Services to use Prisma Repositories (Controllers Unchanged)
+  - [x] Migrate Events Service (supporting venue, from, to filters and page/limit pagination)
+  - [x] Migrate Venues Service
+  - [x] Migrate Bookings Service (calling the transaction wrapper)
+- [x] Task 4: Implement Transactional Bookings (Serializable Concurrency)
+  - [x] Implement transaction in `src/bookings/create-booking.ts` with `Serializable` isolation
+  - [x] Check event capacity (CONFIRMED count only)
+  - [x] Check existing booking: reactivate CANCELLED rows, reject CONFIRMED, leave WAITLISTED
+  - [x] Handle Prisma error mappings (`P2002` -> `409` conflict)
+  - [x] Implement serialization error retries (`P2034` up to 3 attempts)
+- [x] Task 5: Seeding & Concurrency Script Proofing
+  - [x] Write idempotent database seed script in `prisma/seed.ts`
+  - [x] Configure `scripts/parallel-bookings.ts` and `scripts/fixtures/parallel-users.json`
+  - [x] Run concurrency proof showing exactly 5 successful bookings and 15 failures
+- [x] Task 6: Explain Index Performance Proof
+  - [x] Capture query plan (`EXPLAIN ANALYZE`) of bookings counts without index
+  - [x] Add index, capture plan, and document in final walkthrough

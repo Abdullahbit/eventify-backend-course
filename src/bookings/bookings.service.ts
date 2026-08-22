@@ -1,60 +1,98 @@
-import { randomUUID } from 'node:crypto';
+import { prisma } from '../db.ts';
+import { Prisma } from '../generated/prisma/client.ts';
 import { HttpError } from '../errors.ts';
-import { type Booking } from '../domain.ts';
-import { EventsService } from '../events/events.service.ts';
+import { BookingsRepository } from './bookings.repository.ts';
+import { EventsRepository } from '../events/events.repository.ts';
 
-// In-memory store for Bookings
-const store = new Map<string, Booking>();
+function isSerializationFailure(error: unknown): boolean {
+  const e = error as {
+    code?: string;
+    cause?: { originalCode?: string; kind?: string };
+  };
+  if (e?.code === 'P2034' || e?.code === '40001') return true;
+  if (e?.cause?.originalCode === '40001') return true;
+  if (e?.cause?.kind === 'TransactionWriteConflict') return true;
+  return false;
+}
 
 export class BookingsService {
-  static async create(eventId: string, userId: string): Promise<Booking> {
-    // 1. Verify if the event exists (throws 404 if missing)
-    const event = await EventsService.getById(eventId);
+  static async create(eventId: string, userId: string) {
+    const event = await EventsRepository.getById(eventId);
+    if (!event) {
+      throw new HttpError(404, 'Event not found');
+    }
 
-    // 2. Check for duplicate bookings (any status, including CANCELLED)
-    for (const booking of store.values()) {
-      if (booking.userId === userId && booking.eventId === eventId) {
-        throw new HttpError(409, 'User already has a booking for this event');
+    const MAX_RETRIES = 8;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await prisma.$transaction(
+          async (tx) => {
+            const confirmedCount = await BookingsRepository.countConfirmed(eventId, tx);
+
+            if (confirmedCount >= event.capacity) {
+              throw new HttpError(409, 'Event at capacity');
+            }
+
+            const existing = await BookingsRepository.findByUserEvent(userId, eventId, tx);
+
+            if (existing) {
+              if (existing.status === 'CANCELLED') {
+                return BookingsRepository.reactivate(existing.id, tx);
+              }
+
+              if (existing.status === 'CONFIRMED') {
+                throw new HttpError(409, 'User already has a booking for this event');
+              }
+
+              throw new HttpError(409, 'Booking already exists (waitlisted)');
+            }
+
+            return BookingsRepository.create(userId, eventId, tx);
+          },
+          {
+            isolationLevel: 'Serializable',
+          }
+        );
+      } catch (error) {
+        if (error instanceof HttpError) {
+          throw error;
+        }
+
+        const prismaError = error as Prisma.PrismaClientKnownRequestError;
+
+        if (prismaError.code === 'P2002') {
+          throw new HttpError(409, 'User already has a booking for this event');
+        }
+
+        if (isSerializationFailure(error)) {
+          lastError = error;
+          continue;
+        }
+
+        throw error;
       }
     }
 
-    // 3. Check capacity rules (only count CONFIRMED bookings)
-    const confirmedCount = Array.from(store.values()).filter(
-      (b) => b.eventId === eventId && b.status === 'CONFIRMED'
-    ).length;
-
-    if (confirmedCount >= event.capacity) {
-      throw new HttpError(409, 'Event at capacity');
-    }
-
-    // 4. Create the booking
-    const newBooking: Booking = {
-      id: randomUUID(),
-      userId,
-      eventId,
-      status: 'CONFIRMED',
-      createdAt: new Date().toISOString(),
-    };
-
-    store.set(newBooking.id, newBooking);
-    return newBooking;
+    throw lastError ?? new HttpError(500, 'Booking failed after retries');
   }
 
-  static getById(id: string): Booking {
-    const booking = store.get(id);
+  static async getById(id: string) {
+    const booking = await BookingsRepository.getById(id);
     if (!booking) {
       throw new HttpError(404, 'Booking not found');
     }
     return booking;
   }
 
-  static delete(id: string): Booking {
-    const booking = this.getById(id); // Throws 404 if missing
+  static async delete(id: string) {
+    const booking = await this.getById(id);
 
-    // Perform state change (soft delete)
-    booking.status = 'CANCELLED';
-    store.set(id, booking);
+    if (booking.status === 'CANCELLED') {
+      throw new HttpError(409, 'Booking is already cancelled');
+    }
 
-    return booking;
+    return BookingsRepository.cancel(id);
   }
 }
