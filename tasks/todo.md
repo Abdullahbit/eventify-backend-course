@@ -1,27 +1,27 @@
 # Session 4 Homework Checklist — Locking Eventify Down
 
-- [ ] Task 1: Setup RefreshToken DB Schema and Run Migrations
-  - [ ] Add `RefreshToken` model to `prisma/schema.prisma` and add relation to `User`
-  - [ ] Run `npx prisma migrate dev --name add-refresh-token` and verify diff
-- [ ] Task 2: Configure Environment secrets
-  - [ ] Add `JWT_ACCESS_SECRET` and `WEB_ORIGIN` to `src/config.ts` envSchema
-  - [ ] Add variables to `.env` and `.env.example`
-- [ ] Task 3: Implement Token Generation & Verification
-  - [ ] Setup `src/auth/tokens.ts` to sign and verify HS256 JWTs
-  - [ ] Implement Zod payload parser (no casting) for JWT validation
-- [ ] Task 4: Create Auth Service & Repository
-  - [ ] Create `src/auth/repository.ts` for user credentials and token store operations
-  - [ ] Implement hashing helper (`sha256`) and database-backed operations
-  - [ ] Create `AuthService` (`src/auth/service.ts`) for signup, login, and token rotation
-- [ ] Task 5: Setup Auth Routing & Controller
-  - [ ] Expose `/v1/auth/signup`, `/login`, and `/refresh` endpoints
-  - [ ] Return access tokens in response body, and opaque refresh tokens in `httpOnly` secure cookies
-  - [ ] Handle token rotation tripwire: detect already-rotated token replay and revoke family (stretch)
-- [ ] Task 6: Implement Route Protection & BOLA Ownership checks
-  - [ ] Create `requireAuth` and `requireRole` middlewares
-  - [ ] Protect `/events` and `/bookings` endpoints according to policy matrix
-  - [ ] Add ownership (BOLA) validation in controllers (ORGANIZER owns event, ATTENDEE owns booking)
-- [ ] Task 7: Audit and Verification
-  - [ ] Perform local tests of public vs authenticated endpoints
-  - [ ] Conduct OWASP API Security top 10 audit triage
-  - [ ] Run typescript typecheck and lint checks
+- [x] Task 1: Setup RefreshToken DB Schema and Run Migrations
+  - [x] Add `RefreshToken` model to `prisma/schema.prisma` and add relation to `User`
+  - [x] Run `npx prisma migrate dev --name add-refresh-token` and verify diff
+- [x] Task 2: Configure Environment secrets
+  - [x] Add `JWT_ACCESS_SECRET` and `WEB_ORIGIN` to `src/config.ts` envSchema
+  - [x] Add variables to `.env` and `.env.example`
+- [x] Task 3: Implement Token Generation & Verification
+  - [x] Setup `src/auth/tokens.ts` to sign and verify HS256 JWTs
+  - [x] Implement Zod payload parser (no casting) for JWT validation
+- [x] Task 4: Create Auth Service & Repository
+  - [x] Create `src/auth/repository.ts` for user credentials and token store operations
+  - [x] Implement hashing helper (`sha256`) and database-backed operations
+  - [x] Create `AuthService` (`src/auth/service.ts`) for signup, login, and token rotation
+- [x] Task 5: Setup Auth Routing & Controller
+  - [x] Expose `/v1/auth/signup`, `/login`, and `/refresh` endpoints
+  - [x] Return access tokens in response body, and opaque refresh tokens in `httpOnly` secure cookies
+  - [x] Handle token rotation tripwire: detect already-rotated token replay and revoke family (stretch)
+- [x] Task 6: Implement Route Protection & BOLA Ownership checks
+  - [x] Create `requireAuth` and `requireRole` middlewares
+  - [x] Protect `/events` and `/bookings` endpoints according to policy matrix
+  - [x] Add ownership (BOLA) validation in controllers (ORGANIZER owns event, ATTENDEE owns booking)
+- [x] Task 7: Audit and Verification
+  - [x] Perform local tests of public vs authenticated endpoints
+  - [x] Conduct OWASP API Security top 10 audit triage
+  - [x] Run typescript typecheck and lint checks

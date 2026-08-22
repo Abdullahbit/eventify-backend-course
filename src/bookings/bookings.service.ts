@@ -3,6 +3,9 @@ import { Prisma } from '../generated/prisma/client.ts';
 import { HttpError } from '../errors.ts';
 import { BookingsRepository } from './bookings.repository.ts';
 import { EventsRepository } from '../events/events.repository.ts';
+import type { Role } from '../domain.ts';
+
+type Actor = { sub: string; role: Role };
 
 function isSerializationFailure(error: unknown): boolean {
   const e = error as {
@@ -86,8 +89,12 @@ export class BookingsService {
     return booking;
   }
 
-  static async delete(id: string) {
+  static async delete(id: string, actor: Actor) {
     const booking = await this.getById(id);
+
+    if (actor.role !== 'ADMIN' && booking.userId !== actor.sub) {
+      throw new HttpError(403, 'You do not have permission to cancel this booking');
+    }
 
     if (booking.status === 'CANCELLED') {
       throw new HttpError(409, 'Booking is already cancelled');

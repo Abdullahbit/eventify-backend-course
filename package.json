@@ -11,7 +11,7 @@
     "dev": "node --watch --env-file=.env src/server.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "echo \"No tests yet - Vitest arrives in Session 6\" && exit 0",
+    "test": "tsx --env-file=.env --test --test-timeout=30000 src/auth/auth.test.ts",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts",
@@ -20,7 +20,9 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^24.5.0",
+    "@types/supertest": "^6.0.2",
     "dotenv": "^17.0.0",
     "eslint": "^9.30.0",
     "prisma": "^7.9.1",
@@ -32,6 +34,8 @@
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "supertest": "^6.3.4",
     "zod": "^4.4.3"
   }
 }

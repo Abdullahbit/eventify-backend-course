@@ -33,6 +33,7 @@ model User {
 
   bookings Booking[]
   events   Event[]
+  refreshTokens RefreshToken[]
 }
 
 model Event {
@@ -79,4 +80,20 @@ model Booking {
   // event. This index lets Postgres satisfy that count with an index scan
   // instead of a sequential scan (see Task 4 in the PR body).
   @@index([eventId, status])
+}
+
+model RefreshToken {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  tokenHash    String        @unique
+  userId       String        @db.Uuid
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?       @unique @db.Uuid
+  createdAt    DateTime      @default(now())
+
+  user         User          @relation(fields: [userId], references: [id])
+  replacedBy   RefreshToken? @relation("RotationChain", fields: [replacedById], references: [id])
+  replaces     RefreshToken? @relation("RotationChain")
+
+  @@index([userId])
 }
