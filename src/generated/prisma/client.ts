@@ -61,3 +61,8 @@ export type Venue = Prisma.VenueModel
  * 
  */
 export type Booking = Prisma.BookingModel
+/**
+ * Model RefreshToken
+ * 
+ */
+export type RefreshToken = Prisma.RefreshTokenModel
