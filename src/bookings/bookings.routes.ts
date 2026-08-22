@@ -7,7 +7,7 @@ import { createBookingSchema } from './bookings.schema.ts';
 const router = Router();
 
 router.post('/', requireAuth, validate(createBookingSchema), BookingsController.create);
-router.get('/:id', BookingsController.getById);
+router.get('/:id', requireAuth, BookingsController.getById);
 router.delete('/:id', requireAuth, BookingsController.delete);
 
 export { router as bookingsRouter };

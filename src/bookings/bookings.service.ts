@@ -81,16 +81,21 @@ export class BookingsService {
     throw lastError ?? new HttpError(500, 'Booking failed after retries');
   }
 
-  static async getById(id: string) {
+  static async getById(id: string, actor: Actor) {
     const booking = await BookingsRepository.getById(id);
     if (!booking) {
       throw new HttpError(404, 'Booking not found');
     }
+
+    if (actor.role !== 'ADMIN' && booking.userId !== actor.sub) {
+      throw new HttpError(403, 'You do not have permission to access this booking');
+    }
+
     return booking;
   }
 
   static async delete(id: string, actor: Actor) {
-    const booking = await this.getById(id);
+    const booking = await this.getById(id, actor);
 
     if (actor.role !== 'ADMIN' && booking.userId !== actor.sub) {
       throw new HttpError(403, 'You do not have permission to cancel this booking');

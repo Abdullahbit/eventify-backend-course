@@ -23,7 +23,13 @@ export class BookingsController {
       if (!id || typeof id !== 'string') {
         throw new HttpError(400, 'Invalid booking ID');
       }
-      const booking = await BookingsService.getById(id);
+      if (!req.user) {
+        throw new HttpError(401, 'Authentication required');
+      }
+      const booking = await BookingsService.getById(id, {
+        sub: req.user.sub,
+        role: req.user.role,
+      });
       res.status(200).json(booking);
     } catch (error) {
       next(error);
