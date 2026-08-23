@@ -119,3 +119,112 @@ rotation with reuse detection to the Postgres Eventify API.
 - [x] `src/auth/auth.test.ts` (Supertest): public access, 401 unauthenticated,
       403 BOLA between two seeded organizers, successful token rotation.
 - [x] `npm run typecheck` and `npm run lint` pass.
+
+---
+
+# Session 5 — Caching, Queues & Background Jobs
+
+Plan (first commit of the PR). Each item is checked off as it lands.
+
+## Decisions (locked during agent brainstorm)
+- **Background job:** Option A — waitlist promotion (full event → `WAITLISTED`
+  booking; cancel a `CONFIRMED` booking enqueues `waitlist-promote`; worker
+  promotes the oldest `WAITLISTED` → `CONFIRMED` inside a capacity-re-checked
+  transaction, then fires the confirmation email). Puts the `WAITLISTED` status
+  to work and reuses the existing booking transaction.
+- **Foundation:** the cache/limiter/queue/worker "class code" the homework
+  treats as already-built was **absent** in this checkout, so it is built here
+  from the contract (redis.ts, queue-backend.ts, email.queue.ts, worker.ts,
+  cache-aside events.service.ts, `REDIS_URL`, `redis:8` in docker-compose,
+  `redis`+`bullmq` deps).
+- **Mailer:** console transport — renders the email to structured JSON and
+  `console.log`s it. Satisfies "or the console transport", zero creds/deps
+  beyond what's required, swappable for a real transport later.
+
+## Goal
+Add Redis-backed cache-aside reads, a fixed-window rate limiter, a BullMQ v6
+job queue + dedicated worker process, and waitlist promotion (Option A).
+Everything fails **open** when Redis is unreachable so the existing integration
+tests (Postgres-only, no Redis) stay green.
+
+## Task 0 — Dependencies & infra wiring
+- [ ] `package.json`: add `redis` (node-redis v4) + `bullmq` (v6); add
+      `worker` script `node --watch --env-file=.env src/worker.ts`.
+- [ ] `src/config.ts`: add `REDIS_URL` (default `redis://localhost:6379`).
+- [ ] `docker-compose.yml`: add `redis:8` service (+ healthcheck); keep postgres.
+- [ ] `.env.example`: document `REDIS_URL`.
+
+## Task 1 — Redis clients (`src/infra/`)
+- [ ] `src/infra/redis.ts`: node-redis client used for cache + rate limiter
+      (lazy connect; `connect()` called in `server.ts`). Export `cache`.
+- [ ] `src/infra/queue-backend.ts`: a **second**, separate Redis connection via
+      BullMQ `createNodeRedisClient` for the queue/worker. `queueConnection`.
+      Never reuse the cache client.
+- [ ] `src/infra/mailer.ts`: console-transport `sendConfirmation({ to, name, eventTitle })`.
+
+## Task 2 — Cache-aside events service (`src/events/events.service.ts`)
+- [ ] Create `src/events/events.service.ts` with cache-aside `getEvent` /
+      `listEvents` + delete-on-write `updateEvent` / `createEvent` / `deleteEvent`.
+  - key `event:{id}` — TTL 60s + jitter.
+  - key `events:list:{v}:{queryHash}`; version counter `events:list:v`
+    (one `INCR` on write invalidates every list page).
+  - **Fail open:** cache read/set errors fall back to DB (tests / no-Redis safe).
+- [ ] Move existing logic (list envelope, `getEventById` 404, update/delete BOLA)
+      into `events.service.ts`; repoint `controller.ts`; delete old `service.ts`.
+
+## Task 3 — Cache metrics logging (homework #2)
+- [ ] Module-level hit/miss counters; `recordHit()`/`recordMiss()` log
+      `{ hits, misses, ratio }` every 100 lookups as structured JSON.
+- [ ] `startCacheMetrics(60000)` started from `server.ts` (not at module load)
+      logs every 60s — keeps the test process from hanging on a timer.
+
+## Task 4 — Rate limiting (homework #3)
+- [ ] `src/infra/rate-limit.ts`: fixed-window limiter using `cache`
+      (key `rl:{ip}:{path}:{win}`). Fail open on Redis error.
+- [ ] Strict per-IP on `POST /v1/auth/login` (e.g. 5 / 60s / IP).
+- [ ] Per-user (`req.user.sub`, NOT `req.ip`) on `POST /v1/bookings`
+      (e.g. 10 / 60s / user).
+- [ ] `scripts/rate-limit-burst.ts`: scripted burst → 429 at threshold, recovers
+      after the window (proof, not a claim).
+
+## Task 5 — Queue + worker (Option A)
+- [ ] `src/jobs/email.queue.ts`: `emailQueue` (`booking-email`) with
+      retry/backoff defaults; `addConfirmation(bookingId)` (job `confirmation`,
+      payload `{ bookingId }`).
+- [ ] `src/jobs/waitlist.queue.ts`: `waitlistQueue` (`waitlist-promote`);
+      `addWaitlistPromotion(eventId)` (payload `{ eventId }`).
+- [ ] `src/worker.ts`: own process. `Worker('booking-email')` →
+      `sendConfirmation`. `Worker('waitlist-promote')` → in a Serializable tx
+      re-check capacity, promote OLDEST `WAITLISTED` → `CONFIRMED` (no
+      double-promote), then `addConfirmation`.
+
+## Task 6 — Booking transaction changes (Option A)
+- [ ] `src/bookings/repository.ts`: add `createWaitlisted`, `waitlist(id)`,
+      `findOldestWaitlisted(eventId, tx)`.
+- [ ] `src/bookings/service.ts` `createBooking`: at capacity (`confirmed >= cap`),
+      create/flip a `WAITLISTED` booking instead of throwing 409. CONFIRMED path
+      unchanged.
+- [ ] `src/bookings/service.ts` `cancelBooking`: cancelling a `CONFIRMED` booking
+      enqueues `waitlist-promote` `{ eventId }` (worker re-checks capacity,
+      no-ops when not full).
+
+## Task 7 — Proof scripts (Option A acceptance)
+- [ ] `scripts/waitlist-demo.ts`: fill event to capacity → book one more yields
+      `WAITLISTED`; cancel a `CONFIRMED` → worker promotes oldest → `CONFIRMED`;
+      console email log appears; re-run job does not double-promote.
+
+## Task 8 — Deploy prep (homework #4 — YOUR accounts; code stays deploy-ready)
+- [ ] Code already reads `DATABASE_URL` + `REDIS_URL` from env; `worker` script
+      exists. Document the env vars needed for Render (web + worker) / Neon /
+      Upstash in the PR body.
+- [ ] You create the 3 free accounts (Render, Neon, Upstash) and collect the
+      connection strings — never committed to the repo.
+- [ ] Optional: `render.yaml` with web + worker services.
+
+## Task 9 — PR body & verification
+- [ ] `PR_BODY.md`: run steps, **your** AI caching-strategy interrogation notes
+      from the class exercise (what the assistant got wrong + how you caught it),
+      acceptance checklist, exit-ticket answer (why `updateEvent` DELETEs the
+      cache key instead of SETting the fresh value).
+- [ ] `npm run typecheck` + `npm run lint` pass.
+- [ ] Demo scripts run end-to-end against docker `redis` + the worker.
