@@ -4,6 +4,7 @@ import { HttpError } from "../http/HttpError.ts";
 import type { Role } from "../domain.ts";
 import * as bookingRepo from "./repository.ts";
 import * as eventRepo from "../events/repository.ts";
+import { addWaitlistPromotion } from "../jobs/waitlist.queue.ts";
 
 // The authenticated principal performing a mutating action.
 type Actor = { sub: string; role: Role };
@@ -59,12 +60,30 @@ export async function createBooking(userId: string, eventId: string) {
           // 1. Capacity check — count only CONFIRMED bookings
           const confirmedCount = await bookingRepo.countConfirmed(eventId, tx);
 
-          if (confirmedCount >= event.capacity) {
-            throw new HttpError(409, "Event at capacity");
-          }
-
           // 2. Look for an existing booking row (handles rebooking)
           const existing = await bookingRepo.findByUserEvent(userId, eventId, tx);
+
+          if (confirmedCount >= event.capacity) {
+            // Event is FULL → Option A waitlist path. We never oversell: the
+            // capacity check above is inside the Serializable transaction, and
+            // we insert/flip a WAITLISTED row (not CONFIRMED), so the
+            // confirmed count is untouched.
+            if (existing) {
+              if (existing.status === "WAITLISTED") {
+                // Already on the waitlist — idempotent, return as-is.
+                return existing;
+              }
+              if (existing.status === "CANCELLED") {
+                // Same (user,event) row exists but is cancelled; flip it to the
+                // waitlist (can't insert a second row — unique constraint).
+                return bookingRepo.waitlist(existing.id, tx);
+              }
+              // CONFIRMED → genuine duplicate; let the unique constraint fire.
+              throw new HttpError(409, "This user already has a booking for this event");
+            }
+            // No row yet → create a fresh WAITLISTED booking.
+            return bookingRepo.createWaitlisted(userId, eventId, tx);
+          }
 
           if (existing) {
             if (existing.status === "CANCELLED") {
@@ -77,11 +96,11 @@ export async function createBooking(userId: string, eventId: string) {
               throw new HttpError(409, "This user already has a booking for this event");
             }
 
-            // WAITLISTED — leave alone (Session 5's job)
+            // WAITLISTED — leave alone; promotion is the worker's job.
             throw new HttpError(409, "Booking already exists (waitlisted)");
           }
 
-          // 3. No existing row — create new CONFIRMED booking
+          // 3. No existing row and not full — create new CONFIRMED booking
           return bookingRepo.create(userId, eventId, tx);
         },
         {
@@ -137,5 +156,18 @@ export async function cancelBooking(id: string, actor: Actor) {
     throw new HttpError(409, "Booking is already cancelled");
   }
 
-  return bookingRepo.cancel(id);
+  const cancelled = await bookingRepo.cancel(id);
+
+  // Option A: freeing a CONFIRMED seat may let the oldest waitlisted user in.
+  // Enqueue a promotion job; the worker re-checks capacity inside a
+  // transaction and no-ops if the event is no longer full. We only promote
+  // when a CONFIRMED booking was cancelled (not a WAITLISTED one).
+  if (booking.status === "CONFIRMED") {
+    await addWaitlistPromotion(booking.eventId).catch((err) => {
+      // Enqueue failure must not fail the cancel — log and move on.
+      console.error("[waitlist] failed to enqueue promotion:", (err as Error).message);
+    });
+  }
+
+  return cancelled;
 }

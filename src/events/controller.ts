@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { HttpError } from "../http/HttpError.ts";
-import * as eventService from "./service.ts";
+import * as eventService from "./events.service.ts";
 
 export async function createEvent(
   req: Request,

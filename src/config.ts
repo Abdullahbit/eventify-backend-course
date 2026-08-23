@@ -15,6 +15,10 @@ const envSchema = z.object({
   // touch `process.env` directly in app code.
   JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
   WEB_ORIGIN: z.string().url("WEB_ORIGIN must be a valid URL (e.g. http://localhost:3000)"),
+
+  // Session 5 infra. Redis backs the cache, rate limiter, and BullMQ queue.
+  // A localhost default keeps local dev / tests working without an .env entry.
+  REDIS_URL: z.string().min(1, "REDIS_URL is required").default("redis://localhost:6379"),
 });
 
 export type Env = z.infer<typeof envSchema>;

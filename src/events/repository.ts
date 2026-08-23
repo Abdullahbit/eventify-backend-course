@@ -75,8 +75,12 @@ export async function list(
   return { data, total };
 }
 
-export async function getById(id: string) {
-  return prisma.event.findUnique({ where: { id } });
+export async function getById(
+  id: string,
+  tx?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+) {
+  const db = tx ?? prisma;
+  return db.event.findUnique({ where: { id } });
 }
 
 export async function update(id: string, data: EventUpdateInput) {

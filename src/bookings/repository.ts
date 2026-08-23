@@ -49,6 +49,42 @@ export async function create(userId: string, eventId: string, tx: any) {
 }
 
 /**
+ * Create a new WAITLISTED booking (Option A: event is full). Reuses the same
+ * (userId, eventId) row semantics — the unique constraint still applies, so
+ * the caller must only use this when no live row exists for the pair.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function createWaitlisted(userId: string, eventId: string, tx: any) {
+  return tx.booking.create({
+    data: { userId, eventId, status: "WAITLISTED" },
+  });
+}
+
+/**
+ * Flip an existing booking row to WAITLISTED (used when a user with a
+ * CANCELLED row re-books a full event — we can't insert a second row).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function waitlist(bookingId: string, tx: any) {
+  return tx.booking.update({
+    where: { id: bookingId },
+    data: { status: "WAITLISTED" },
+  });
+}
+
+/**
+ * Find the oldest WAITLISTED booking for an event, inside a transaction.
+ * Used by the waitlist-promote worker to promote exactly one user (FIFO).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function findOldestWaitlisted(eventId: string, tx: any) {
+  return tx.booking.findFirst({
+    where: { eventId, status: "WAITLISTED" },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/**
  * Get a booking by id (outside transaction).
  */
 export async function getById(id: string) {
