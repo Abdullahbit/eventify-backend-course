@@ -5,7 +5,9 @@
 //
 // Promotion runs inside a Serializable transaction that RE-CHECKS capacity at
 // promotion time. The worker fires this after a cancel frees a seat, but
-// concurrent cancels/bookings mean we must verify "is it still full?" here.
+// concurrent cancels/bookings mean we must verify "is there still a free seat?"
+// here — if the freed seat was already taken by a competing promotion/booking,
+// we simply no-op instead of over-promoting.
 // Promoting the OLDEST waitlisted row (FIFO) and flipping it to CONFIRMED means
 // a re-run can never double-promote: their row is no longer WAITLISTED, so the
 // next run picks the next person (or no one). Idempotent by construction.
@@ -15,9 +17,9 @@ import * as eventRepo from "../events/repository.ts";
 import { addConfirmation } from "./email.queue.ts";
 
 /**
- * Promote the oldest WAITLISTED booking for an event to CONFIRMED, if the
- * event is (still) full after re-checking capacity. No-ops when the event is
- * not full or nobody is waitlisted. Returns the promoted booking id, or null.
+ * Promote the oldest WAITLISTED booking for an event to CONFIRMED, if a seat is
+ * free after re-checking capacity. No-ops when the event is already at capacity
+ * (no room) or nobody is waitlisted. Returns the promoted booking id, or null.
  */
 export async function promoteWaitlisted(eventId: string): Promise<string | null> {
   let promotedId: string | null = null;
@@ -30,7 +32,10 @@ export async function promoteWaitlisted(eventId: string): Promise<string | null>
       }
 
       const confirmedCount = await bookingRepo.countConfirmed(eventId, tx);
-      if (confirmedCount >= event.capacity) {
+      // Only promote when there is actually a free seat (a CONFIRMED cancel
+      // dropped confirmedCount below capacity). Promoting while full would
+      // over-sell the event.
+      if (confirmedCount < event.capacity) {
         const oldest = await bookingRepo.findOldestWaitlisted(eventId, tx);
         if (oldest) {
           await bookingRepo.reactivate(oldest.id, tx); // WAITLISTED -> CONFIRMED

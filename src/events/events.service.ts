@@ -63,6 +63,28 @@ export function startCacheMetrics(intervalMs = 60_000): void {
   timer.unref?.();
 }
 
+// --- Cache stampede protection (homework stretch goal #8) -----------------
+// When a hot key expires, many concurrent requests can all miss and stampede
+// the database. We coalesce concurrent misses for the same cache key into a
+// single in-flight fetch: the first request runs the DB query; every other
+// concurrent request for that key awaits the SAME promise. N concurrent misses
+// therefore produce exactly ONE database hit. The map entry is removed once the
+// promise settles (resolve or reject), so there is no leak and the next wave
+// re-fetches from the DB.
+const inflight = new Map<string, Promise<unknown>>();
+
+function coalesce<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+  const p = fn();
+  inflight.set(key, p);
+  p.then(
+    () => inflight.delete(key),
+    () => inflight.delete(key),
+  );
+  return p;
+}
+
 function eventKey(id: string): string {
   return `${EVENT_KEY_PREFIX}${id}`;
 }
@@ -155,25 +177,29 @@ export async function listEvents(query: {
   }
   recordMiss();
 
-  const { data, total } = await eventRepo.list(page, limit, {
-    venue: query.venue,
-    from: query.from,
-    to: query.to,
-  });
+  // Cache stampede protection (#8): concurrent misses for the same list key
+  // coalesce into ONE database fetch instead of N.
+  return coalesce(key, async () => {
+    const { data, total } = await eventRepo.list(page, limit, {
+      venue: query.venue,
+      from: query.from,
+      to: query.to,
+    });
 
-  try {
-    if (isCacheReady()) {
-      await cache.set(
-        key,
-        JSON.stringify({ data, page, limit, total }),
-        { EX: listCacheTtl() },
-      );
+    try {
+      if (isCacheReady()) {
+        await cache.set(
+          key,
+          JSON.stringify({ data, page, limit, total }),
+          { EX: listCacheTtl() },
+        );
+      }
+    } catch {
+      // best-effort write — a miss on next read just re-fetches
     }
-  } catch {
-    // best-effort write — a miss on next read just re-fetches
-  }
 
-  return { data, page, limit, total };
+    return { data, page, limit, total };
+  });
 }
 
 export async function getEventById(id: string) {
@@ -193,20 +219,24 @@ export async function getEventById(id: string) {
   }
   recordMiss();
 
-  const event = await eventRepo.getById(id);
-  if (!event) {
-    throw new HttpError(404, "Event not found");
-  }
-
-  try {
-    if (isCacheReady()) {
-      await cache.set(key, JSON.stringify(event), { EX: listCacheTtl() });
+  // Cache stampede protection (#8): concurrent misses for the same event:{id}
+  // coalesce into ONE database fetch instead of N.
+  return coalesce(key, async () => {
+    const event = await eventRepo.getById(id);
+    if (!event) {
+      throw new HttpError(404, "Event not found");
     }
-  } catch {
-    // best-effort
-  }
 
-  return event;
+    try {
+      if (isCacheReady()) {
+        await cache.set(key, JSON.stringify(event), { EX: listCacheTtl() });
+      }
+    } catch {
+      // best-effort
+    }
+
+    return event;
+  });
 }
 
 export async function updateEvent(

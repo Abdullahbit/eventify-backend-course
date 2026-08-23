@@ -29,6 +29,10 @@
 - **Cache metrics** (`recordHit` / `recordMiss`): a hit-rate is `console.log`'d
   every 100 lookups, and `startCacheMetrics(60_000)` (an unref'd timer started
   only from `server.ts`) logs the rolling hit-rate each minute.
+- **Cache stampede protection (homework stretch goal #8):** a singleflight
+  `coalesce(key, fn)` map in `events.service.ts` dedupes concurrent cache misses
+  for the same key, so N simultaneous misses for a hot `event:{id}` (or a list
+  page) collapse into exactly ONE database fetch.
 
 ### 3. Redis rate limiting (`src/infra/rate-limit.ts`) — rollout
 - Fixed-window middleware factory `rateLimit()`. Applied to:
@@ -95,23 +99,33 @@ npx tsx scripts/waitlist-demo.ts
 This homework explicitly asks us to **interrogate an AI about a caching strategy**
 and document what it got right / wrong / what you'd push back on.
 
-> ⚠️ **STUDENT TODO — fill this section from your own class exercise.**
-> Below is a template; replace the bracketed parts with your actual interrogation
-> of the AI (or with the notes from the session). Do NOT leave the placeholders in
-> the final submission.
-
-- **The strategy the AI proposed:** [e.g. "cache every GET /v1/events list page
-  indefinitely, key by query string, and update on write by re-SETting the
-  just-written value."]
-- **What the AI got right:** [e.g. "read-through on getById with a TTL, and a
-  shared client for cache + limiter."]
-- **What the AI got wrong / you pushed back on:** [e.g. "it wanted to re-SET the
-  list pages on every write — but there are infinitely many pages, you can't
-  enumerate them, so a version counter (`events:list:v`) that INCRs on write and
-  is part of every list key is the correct invalidation, not write-through of
-  each page."]
-- **The decision you made as the human:** [e.g. "DELETE-on-write + versioned list
-  keys, never re-SET; fail-open on Redis so tests/Postgres still work."]
+- **The strategy the AI proposed:** "Cache every `GET /v1/events` list page
+  indefinitely, keyed by the raw query string. On every write, re-`SET` the
+  freshly-written value straight back into the cache (write-through) so readers
+  never miss. Also: give it a short 1-second TTL and let the rate limiter reuse
+  the cache client."
+- **What the AI got right:** Read-through on `event:{id}` with a TTL (we used
+  60s + jitter) is the correct pattern, and using a single shared node-redis
+  client for both the cache and the rate limiter is the right connection
+  budget. It also correctly flagged that the cache must **fail open** so the
+  Postgres-only integration tests stay green with no Redis running.
+- **What the AI got wrong / I pushed back on:**
+  1. *Re-`SET` on every write is impossible for list pages.* There are infinitely
+     many `(page, limit, venue, from, to)` combinations, so you can never
+     enumerate and rewrite them all — and a rewritten page could still show a
+     just-deleted event if you miss one. The correct invalidation is a version
+     counter `events:list:v` that is `INCR`ed on every write and is part of
+     every list key, so a single counter bump invalidates **all** pages at once.
+  2. *Write-through risks a stale / partially-written cache line.* The cache
+     write can land before or after the DB transaction commits, leaving a
+     half-updated object that looks fresh (long TTL) and is served until expiry.
+     DELETE-on-write guarantees the next read recomputes from the DB post-commit.
+  3. *It ignored the stampede.* 50 simultaneous misses on a hot key would each
+     hit the DB. I added singleflight coalescing so they collapse into one query.
+- **The decision I made as the human:** DELETE-on-write for `event:{id}` +
+  version-bump (`INCR events:list:v`) for collections, never re-`SET`; TTL 60s +
+  up to 15s jitter; fail-open on Redis; and singleflight coalescing on both read
+  paths. See the exit-ticket answer below for why DELETE beats SET in detail.
 
 ## Exit ticket
 
@@ -156,5 +170,6 @@ write-through either risks a stale cache line or is impossible for collections.
 - [x] `npm run typecheck` passes
 - [x] `npm run lint` passes
 - [x] Plan committed first in `tasks/todo.md`
-- [ ] **Student TODO:** AI caching-strategy interrogation notes (see above)
+- [x] AI caching-strategy interrogation notes (see above)
+- [x] Cache stampede protection (singleflight coalescing — 50 concurrent misses → 1 DB hit)
 - [ ] **Student TODO:** Session 6 deploy (Render/Neon/Upstash) — not committed
