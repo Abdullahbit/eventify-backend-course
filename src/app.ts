@@ -5,6 +5,7 @@ import authRoutes from "./auth/routes.ts";
 import bookingRoutes from "./bookings/routes.ts";
 import eventRoutes from "./events/routes.ts";
 import venueRoutes from "./venues/routes.ts";
+import { openApiDocument } from "./openapi.ts";
 
 // The Express app, built once and exported so it can be imported by both the
 // server entrypoint (src/server.ts) and the test suite without auto-listening.
@@ -14,6 +15,10 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
+
+app.get("/openapi.json", (_req, res) => {
+  res.status(200).json(openApiDocument);
 });
 
 app.use("/v1/auth", authRoutes);
