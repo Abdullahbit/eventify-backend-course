@@ -6,9 +6,16 @@
 //
 // BullMQ manages connect/disconnect itself once this client is handed to a
 // Queue/Worker, so we do not call .connect() here.
+import { createClient } from "redis";
 import { createNodeRedisClient } from "bullmq";
 import { env } from "../config.ts";
 
-export const queueConnection = createNodeRedisClient({
+const raw = createClient({
   url: env.REDIS_URL,
 });
+
+raw.on("error", (err) => {
+  console.error("[redis-queue] connection error:", err.message);
+});
+
+export const queueConnection = createNodeRedisClient(raw);

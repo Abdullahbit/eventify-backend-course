@@ -29,15 +29,14 @@ async function main() {
     data: {
       email: `organizer-${runSuffix}@eventify.dev`,
       name: "Organizer",
-      passwordHash: "x",
       role: "ORGANIZER",
     },
   });
   const alice = await prisma.user.create({
-    data: { email: `alice-${runSuffix}@eventify.dev`, name: "Alice", passwordHash: "x", role: "ATTENDEE" },
+    data: { email: `alice-${runSuffix}@eventify.dev`, name: "Alice", role: "ATTENDEE" },
   });
   const bob = await prisma.user.create({
-    data: { email: `bob-${runSuffix}@eventify.dev`, name: "Bob", passwordHash: "x", role: "ATTENDEE" },
+    data: { email: `bob-${runSuffix}@eventify.dev`, name: "Bob", role: "ATTENDEE" },
   });
 
   const event = await prisma.event.create({

@@ -163,7 +163,7 @@ export async function cancelBooking(id: string, actor: Actor) {
   // transaction and no-ops if the event is no longer full. We only promote
   // when a CONFIRMED booking was cancelled (not a WAITLISTED one).
   if (booking.status === "CONFIRMED") {
-    await addWaitlistPromotion(booking.eventId).catch((err) => {
+    addWaitlistPromotion(booking.eventId).catch((err) => {
       // Enqueue failure must not fail the cancel — log and move on.
       console.error("[waitlist] failed to enqueue promotion:", (err as Error).message);
     });

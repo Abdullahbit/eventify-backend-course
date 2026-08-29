@@ -40,13 +40,17 @@ export async function promoteWaitlisted(eventId: string): Promise<string | null>
         if (oldest) {
           await bookingRepo.reactivate(oldest.id, tx); // WAITLISTED -> CONFIRMED
           promotedId = oldest.id;
-          // Fire the confirmation email for the promoted user.
-          await addConfirmation(oldest.id);
         }
       }
     },
     { isolationLevel: "Serializable" },
   );
+
+  if (promotedId) {
+    addConfirmation(promotedId).catch((err) => {
+      console.error("[waitlist] failed to enqueue confirmation email:", (err as Error).message);
+    });
+  }
 
   return promotedId;
 }
