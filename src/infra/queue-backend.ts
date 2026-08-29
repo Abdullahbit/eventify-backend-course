@@ -19,3 +19,12 @@ raw.on("error", (err) => {
 });
 
 export const queueConnection = createNodeRedisClient(raw);
+
+export async function closeQueueConnection(): Promise<void> {
+  try {
+    raw.disconnect().catch(() => {});
+    raw.destroy();
+  } catch {
+    // ignore
+  }
+}

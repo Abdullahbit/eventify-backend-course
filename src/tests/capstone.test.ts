@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import request from "supertest";
 import { app } from "../app.ts";
 import { prisma } from "../db.ts";
+import { closeCacheConnection } from "../infra/redis.ts";
+import { closeQueueConnection } from "../infra/queue-backend.ts";
 
 const ORGANIZER_EMAIL = "organizer-capstone@eventify.dev";
 const ATTENDEE_1_EMAIL = "attendee1-capstone@eventify.dev";
@@ -47,7 +49,10 @@ describe("Capstone v1.0 — Integration Test Suite", () => {
   });
 
   after(async () => {
-    await prisma.$disconnect();
+    await prisma.$disconnect().catch(() => {});
+    await closeCacheConnection();
+    await closeQueueConnection();
+    setImmediate(() => process.exit(0));
   });
 
   // 1. Register/login, refresh rotation & reuse theft tripwire

@@ -12,7 +12,7 @@
     "worker": "node --watch --env-file=.env src/worker.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "tsx --test --test-timeout=30000 src/auth/auth.test.ts src/tests/capstone.test.ts",
+    "test": "tsx --test --test-timeout=30000 src/tests/run-all.ts",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts",

@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import request from "supertest";
 import { app } from "../app.ts";
 import { prisma } from "../db.ts";
+import { closeCacheConnection } from "../infra/redis.ts";
+import { closeQueueConnection } from "../infra/queue-backend.ts";
 
 // These are integration tests: they hit the real Express app against a live
 // Postgres (migrated + seeded). Run with:
@@ -57,7 +59,9 @@ before(async () => {
 });
 
 after(async () => {
-  await prisma.$disconnect();
+  await prisma.$disconnect().catch(() => {});
+  await closeCacheConnection();
+  await closeQueueConnection();
 });
 
 describe("Session 4 — auth, authorization, BOLA, refresh rotation", () => {
