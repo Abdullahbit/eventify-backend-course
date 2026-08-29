@@ -1,3 +1,14 @@
+/**
+ * Idempotent seed script for Eventify (Session 3).
+ *
+ * Creates:
+ * - 3 users (ORGANIZER, ADMIN, ATTENDEE)
+ * - 20 extra users for the parallel-bookings script
+ * - 5 events (1 with capacity 5 for the concurrency test)
+ * - Some bookings
+ *
+ * Uses upsert so it can run multiple times without duplicates.
+ */
 import "dotenv/config";
 import { resolve } from "node:path";
 import { PrismaClient } from "../src/generated/prisma/client.ts";
@@ -34,7 +45,6 @@ async function main() {
     where: { email: "attendee@eventify.dev" },
     update: {},
     create: {
-      id: "00000000-0000-0000-0000-000000000001",
       name: "Atten Dee",
       email: "attendee@eventify.dev",
       role: "ATTENDEE",
@@ -152,7 +162,19 @@ async function main() {
 
   console.log(`  ✅ Bookings: 2 created/upserted`);
 
+  // --- Print info for parallel-bookings fixture ---
+  console.log("\n📋 Parallel-bookings fixture data:");
+  console.log(`   baseUrl:    http://localhost:3000`);
+  console.log(`   eventId:    ${capacityEvent.id}`);
+  console.log(`   capacity:   ${capacityEvent.capacity}`);
+  console.log(`   Users:`);
+  for (const user of parallelUsers) {
+    console.log(`     ${user.id}`);
+  }
+
   // --- Write the parallel-bookings fixture with the REAL ids ---
+  // (20 user uuids + the capacity-test event uuid) so the concurrency
+  // script never has to be hand-edited after a re-seed.
   const fixture = {
     baseUrl: "http://localhost:3000",
     eventId: capacityEvent.id,

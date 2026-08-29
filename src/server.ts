@@ -1,11 +1,15 @@
-import { app } from './app.ts';
+import { env } from "./config.ts";
+import { app } from "./app.ts";
+import { connectCache } from "./infra/redis.ts";
+import { startCacheMetrics } from "./events/events.service.ts";
 
-const PORT = process.env.PORT || 3000;
+const port = env.PORT;
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`Health check available at http://localhost:${PORT}/health`);
-  console.log(`Venues API resource active at http://localhost:${PORT}/v1/venues`);
-  console.log(`Bookings API resource active at http://localhost:${PORT}/v1/bookings`);
-  console.log(`Events API resource active at http://localhost:${PORT}/v1/events`);
+// Connect the Redis cache/limiter client (fail-open if Redis is unreachable —
+// see src/infra/redis.ts). Then start the periodic cache-metrics logger.
+await connectCache();
+startCacheMetrics(60_000);
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}/health`);
 });

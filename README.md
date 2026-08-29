@@ -47,6 +47,67 @@ this is the real gate; run it before every commit.
 **`npm run lint`** - runs ESLint (flat config, typescript-eslint) over the
 project. Preconfigured from day one; CI starts enforcing it in Session 6.
 
+## Session 3 — Postgres, transactions & concurrency
+
+Session 3 swaps the in-memory stores for **PostgreSQL** via **Prisma 7** and
+adds a race-safe, transactional booking flow. Everything runs locally against
+a Docker Postgres.
+
+### 1. Start Postgres (Docker)
+
+```bash
+npm run db:up          # docker compose up -d  (postgres:17, db=eventify, port 5432)
+```
+
+The connection string lives in `.env` (`DATABASE_URL=postgresql://eventify:eventify@localhost:5432/eventify?schema=public`).
+
+### 2. Generate the Prisma client & create the schema
+
+```bash
+npm run prisma:generate   # prisma generate  (writes src/generated/prisma)
+npm run migrate:dev       # prisma migrate dev  (creates the migration + applies it)
+```
+
+> Prisma 7 does NOT auto-load `.env`; `prisma.config.ts` imports `dotenv/config`
+> explicitly so `DATABASE_URL` is available to the CLI.
+
+### 3. Seed the database (idempotent)
+
+```bash
+npm run seed             # tsx prisma/seed.ts
+```
+
+Creates 3 base users + 20 parallel-test users, 5 events (one with capacity 5
+for the concurrency test), and a couple of sample bookings. Safe to re-run
+(`upsert` everywhere).
+
+### 4. Run the API
+
+```bash
+npm run dev              # node --watch --env-file=.env src/server.ts  (port 3000)
+```
+
+Endpoints (all under `/v1`):
+- `GET    /v1/events?page=&limit=&venue=&from=&to=` — paginated, filtered (Postgres).
+- `POST   /v1/events` — create event (body: `title, description, venue?, startsAt, capacity, priceCents?, organizerId`).
+- `GET/PUT/DELETE /v1/events/:id`.
+- `POST   /v1/bookings` — create booking (body: `userId, eventId`).
+- `GET/DELETE /v1/bookings/:id` — fetch / cancel (cancel flips status to `CANCELLED`).
+
+### 5. Concurrency proof
+
+After seeding, run the parallel script which fires **20 simultaneous** `POST /v1/bookings`
+for the capacity-5 event as 20 distinct users:
+
+```bash
+node scripts/parallel-bookings.ts
+```
+
+It prints a status tally and exits non-zero only on **oversell** (more than
+`capacity` `201`s). With the Serializable transaction + unique `(userId, eventId)`
+constraint, you should see exactly **5× `201`** and 15× `409` (capacity), never
+more than 5 confirmed.
+
 ## Homework is submitted as a Pull Request
 
 Every session's homework lands as **one PR** to your own `eventify` repo:

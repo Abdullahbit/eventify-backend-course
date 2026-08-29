@@ -1,40 +1,42 @@
-import type { Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
-import { HttpError } from '../errors.ts';
+import type { NextFunction, Request, Response } from "express";
+import { z } from "zod";
+import { HttpError } from "../http/HttpError.ts";
 
-interface ZodErrorLike {
-  errors: { message: string }[];
-}
+type ValidatedRequest = Request & {
+  validatedQuery?: Record<string, unknown>;
+};
 
-function isZodErrorLike(error: unknown): error is ZodErrorLike {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const err = error as Record<string, unknown>;
-  return 'errors' in err && Array.isArray(err.errors);
-}
+export function validate<T>(schema: z.ZodType<T>) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.body);
 
-export function validate(schema: z.ZodTypeAny) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      req.body = await schema.parseAsync(req.body);
-      next();
-    } catch (error) {
-      const errorMessage = isZodErrorLike(error) && error.errors[0] ? error.errors[0].message : 'Invalid request body';
-      next(new HttpError(400, errorMessage));
+    if (!result.success) {
+      const message = result.error.issues
+        .map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`)
+        .join("; ");
+
+      return next(new HttpError(400, message, result.error.issues));
     }
+
+    req.body = result.data;
+    next();
   };
 }
 
-export function validateQuery(schema: z.ZodTypeAny) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      res.locals.query = await schema.parseAsync(req.query);
-      next();
-    } catch (error) {
-      console.error('Validation Query Error:', error);
-      const errorMessage = isZodErrorLike(error) && error.errors[0] ? error.errors[0].message : 'Invalid query parameters';
-      next(new HttpError(400, errorMessage));
+export function validateQuery<T>(schema: z.ZodType<T>) {
+  return (req: ValidatedRequest, res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.query);
+
+    if (!result.success) {
+      const message = result.error.issues
+        .map((issue) => `${issue.path.join(".") || "query"}: ${issue.message}`)
+        .join("; ");
+
+      return next(new HttpError(400, message, result.error.issues));
     }
+
+    res.locals.query = result.data;
+    req.validatedQuery = result.data as Record<string, unknown>;
+    next();
   };
 }
