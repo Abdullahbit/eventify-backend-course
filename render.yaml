@@ -4,7 +4,7 @@ services:
     name: eventify-api
     env: node
     plan: free
-    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run seed
     startCommand: node src/server.ts
     healthCheckPath: /health
     envVars:
@@ -17,7 +17,7 @@ services:
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: WEB_ORIGIN
-        value: "*"
+        value: http://localhost:3000
       - key: PORT
         value: 10000
 
