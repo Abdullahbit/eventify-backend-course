@@ -15,7 +15,7 @@ const envSchema = z.object({
   // Session 4 auth secrets / config. Read ONLY through this module — never
   // touch `process.env` directly in app code.
   JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
-  WEB_ORIGIN: z.string().url("WEB_ORIGIN must be a valid URL (e.g. http://localhost:3000)"),
+  WEB_ORIGIN: z.string().min(1, "WEB_ORIGIN is required").default("http://localhost:3000"),
 
   // Session 5 infra. Redis backs the cache, rate limiter, and BullMQ queue.
   // A localhost default keeps local dev / tests working without an .env entry.
