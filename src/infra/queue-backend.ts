@@ -9,9 +9,10 @@
 import { createClient } from "redis";
 import { createNodeRedisClient } from "bullmq";
 import { env } from "../config.ts";
+import { sanitizeRedisUrl } from "./redis.ts";
 
 const raw = createClient({
-  url: env.REDIS_URL,
+  url: sanitizeRedisUrl(env.REDIS_URL),
 });
 
 raw.on("error", (err) => {

@@ -13,7 +13,21 @@
 import { createClient } from "redis";
 import { env } from "../config.ts";
 
-export const cache = createClient({ url: env.REDIS_URL });
+export function sanitizeRedisUrl(url: string | undefined): string {
+  if (!url) return "redis://localhost:6379";
+  const cleaned = url.trim().replace(/^['"]|['"]$/g, "");
+  const match = cleaned.match(/(rediss?:\/\/[^\s]+)/);
+  if (match && typeof match[1] === "string") {
+    return match[1];
+  }
+  if (!cleaned.startsWith("redis://") && !cleaned.startsWith("rediss://")) {
+    console.warn(`[redis] Invalid REDIS_URL protocol "${cleaned}". Expected rediss:// or redis://. Falling back to default.`);
+    return "redis://localhost:6379";
+  }
+  return cleaned;
+}
+
+export const cache = createClient({ url: sanitizeRedisUrl(env.REDIS_URL) });
 
 // True only once the connection is established. Consumers use this to decide
 // whether to attempt a cache/limiter operation or short-circuit to fail-open.
