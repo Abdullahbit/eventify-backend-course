@@ -3,6 +3,7 @@
     // Node 24 strips types at run time and checks NOTHING.
     // `npm run typecheck` (tsc --noEmit) is the real gate - run it.
     "target": "es2024",
+    "lib": ["es2024"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
 
