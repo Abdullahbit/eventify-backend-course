@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import request from "supertest";
 import { app } from "../app.ts";
 import { prisma } from "../db.ts";
+import { closeCacheConnection } from "../infra/redis.ts";
+import { closeQueueConnection } from "../infra/queue-backend.ts";
 
 // These are integration tests: they hit the real Express app against a live
 // Postgres (migrated + seeded). Run with:
@@ -50,6 +52,18 @@ async function login(email: string): Promise<{ accessToken: string; cookie: stri
 
 before(async () => {
   await prisma.user.upsert({
+    where: { email: ORGANIZER_EMAIL },
+    update: {},
+    create: { name: "Organizer One", email: ORGANIZER_EMAIL, role: "ORGANIZER" },
+  });
+
+  await prisma.user.upsert({
+    where: { email: ATTENDEE_EMAIL },
+    update: {},
+    create: { name: "Attendee One", email: ATTENDEE_EMAIL, role: "ATTENDEE" },
+  });
+
+  await prisma.user.upsert({
     where: { email: SECOND_ORGANIZER_EMAIL },
     update: {},
     create: { name: "Orga Nizer Two", email: SECOND_ORGANIZER_EMAIL, role: "ORGANIZER" },
@@ -57,7 +71,9 @@ before(async () => {
 });
 
 after(async () => {
-  await prisma.$disconnect();
+  await prisma.$disconnect().catch(() => {});
+  await closeCacheConnection();
+  await closeQueueConnection();
 });
 
 describe("Session 4 — auth, authorization, BOLA, refresh rotation", () => {

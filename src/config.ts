@@ -4,6 +4,7 @@
 // code must import `env` from this module and never read `process.env`
 // directly — that keeps the set of required variables explicit and validated
 // at startup.
+import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({

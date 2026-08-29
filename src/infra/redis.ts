@@ -31,3 +31,12 @@ export async function connectCache(): Promise<void> {
   });
   await cache.connect();
 }
+
+export async function closeCacheConnection(): Promise<void> {
+  try {
+    cache.disconnect().catch(() => {});
+    cache.destroy();
+  } catch {
+    // ignore
+  }
+}
