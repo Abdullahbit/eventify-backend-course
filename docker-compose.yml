@@ -1,39 +1,29 @@
-name: eventify
-
+# Local infra for Eventify (Session 3+).
+#   docker compose up -d
+# DATABASE_URL (postgres) and REDIS_URL (redis) live in .env.
 services:
   postgres:
-    image: postgres:18
+    image: postgres:17-alpine
+    container_name: eventify-postgres
     environment:
       POSTGRES_USER: eventify
       POSTGRES_PASSWORD: eventify
       POSTGRES_DB: eventify
     ports:
-      - "5432:5432" # host:container — your app connects to localhost:5432
+      - "5433:5432"
     volumes:
-      # Named volume so your data survives `docker compose down` and restarts.
-      # postgres:18 keeps its data under /var/lib/postgresql — older tutorials
-      # (and AI snippets) mount /var/lib/postgresql/data, which on 18 silently
-      # stops persisting anything. Session 6 explains why.
-      - pgdata:/var/lib/postgresql
-      # Seed script: creates the `sandbox` database (snake_case tables,
-      # ~2k users / ~200 events / ~10k bookings) on first boot only.
-      - ./session-3-sandbox-seed.sql:/docker-entrypoint-initdb.d/10-sandbox-seed.sql:ro
+      - eventify-pg-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U eventify -d eventify"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 10
 
-  # ---------------------------------------------------------------------------
-  # IGNORE UNTIL SESSION 5. Redis arrives with caching, rate limiting and
-  # background jobs. It costs nothing to have it running in the meantime.
-  # From Session 5 on: docker compose exec redis redis-cli
-  # No volume on purpose: dev cache/queue data is disposable.
-  # ---------------------------------------------------------------------------
   redis:
     image: redis:8
+    container_name: eventify-redis
     ports:
-      - "6379:6379" # REDIS_URL=redis://localhost:6379
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -41,4 +31,4 @@ services:
       retries: 10
 
 volumes:
-  pgdata:
+  eventify-pg-data:

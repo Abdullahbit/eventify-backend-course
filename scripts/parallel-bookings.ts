@@ -35,10 +35,11 @@ async function main() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-user-id": user.userId,
           ...(user.token ? { Authorization: `Bearer ${user.token}` } : {}),
         },
-        body: JSON.stringify({ eventId: fixture.eventId }),
+        // Forward the distinct user id so the server books 20 DIFFERENT users
+        // (the proof only works if each request maps to a different row).
+        body: JSON.stringify({ userId: user.userId, eventId: fixture.eventId }),
       });
       return { userId: user.userId, status: res.status };
     }),
