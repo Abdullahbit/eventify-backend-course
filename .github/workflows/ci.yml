@@ -65,6 +65,9 @@ jobs:
       - name: Apply Database Migrations
         run: npx prisma migrate deploy
 
+      - name: Seed Database
+        run: npm run seed
+
       - name: Run ESLint
         run: npm run lint
 
