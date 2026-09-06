@@ -1,92 +1,112 @@
 # Technical Walkthrough: Mini Order & Inventory Backend
 
-Use this guide to walk your grader through the actual codebase, explaining the technical decisions and how everything wires together.
+Use this guide to walk your grader through the actual codebase, explaining the technical decisions and how everything wires together to meet the final assignment requirements perfectly.
 
 ---
 
 ## 1. Database Schema (`prisma/schema.prisma`)
-Our database is defined using Prisma's schema language.
+Our database is defined using Prisma's schema language and is strictly normalized.
 
 ```prisma
 model Product {
-  id         Int         @id @default(autoincrement())
-  name       String
-  stock      Int
-  orderItems OrderItem[]
+  id           Int         @id @default(autoincrement())
+  name         String
+  priceInCents Int
+  stock        Int
+  orderItems   OrderItem[]
 }
 
 model Order {
-  id         Int         @id @default(autoincrement())
-  status     String      @default("PENDING")
-  orderItems OrderItem[]
+  id            Int         @id @default(autoincrement())
+  customerEmail String
+  status        String      @default("placed")
+  totalInCents  Int
+  createdAt     DateTime    @default(now())
+  orderItems    OrderItem[]
 }
 
 model OrderItem {
-  id        Int     @id @default(autoincrement())
-  orderId   Int
-  productId Int
-  quantity  Int
-  order     Order   @relation(fields: [orderId], references: [id])
-  product   Product @relation(fields: [productId], references: [id])
+  id               Int     @id @default(autoincrement())
+  orderId          Int
+  productId        Int
+  quantity         Int
+  unitPriceInCents Int
+  order            Order   @relation(fields: [orderId], references: [id])
+  product          Product @relation(fields: [productId], references: [id])
 }
 ```
 **Talking Points:**
-- Point out the `OrderItem` model. Explain that this is a **Junction Table** (or associative entity) connecting a many-to-many relationship between `Order` and `Product`. 
-- By using `OrderItem`, we can track the specific `quantity` of a product bought in a single order, rather than just storing a list of IDs. This guarantees a normalized database structure (3NF).
+- Point out the `OrderItem` model. Explain that this is a **Junction Table** (or associative entity) connecting a many-to-many relationship between `Order` and `Product`.
+- By tracking `unitPriceInCents` in the `OrderItem` table, we "freeze" the price of the product at the exact moment of purchase. If the product price changes next week, past orders won't be mathematically corrupted. 
+- Using `priceInCents` prevents floating-point precision errors (like `$1.99 + $0.01 = 2.00000000001`) that often break financial systems.
 
 ---
 
 ## 2. The Core Logic (`src/index.ts`)
-This file is our Express application. The most critical part of this file is the `POST /orders` endpoint.
+This file is our Express application. The most critical part of this file is the `POST /orders` endpoint, which handles bulk purchasing and validations.
 
 ```typescript
+// After validating email, positive quantities, and duplicate IDs...
 const result = await prisma.$transaction(async (tx) => {
-  // 1. Fetch the product to check stock
-  const product = await tx.product.findUnique({ where: { id: productId } });
+  let totalInCents = 0;
+  const orderItemsData = [];
 
-  if (product.stock < quantity) {
-    throw new Error('Out of stock');
+  for (const item of items) {
+    const product = await tx.product.findUnique({ where: { id: item.productId } });
+
+    if (product.stock < item.quantity) {
+      throw new Error('Out of stock');
+    }
+
+    // Accumulate total and lock in the unit price
+    totalInCents += product.priceInCents * item.quantity;
+    orderItemsData.push({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPriceInCents: product.priceInCents
+    });
+
+    // Deduct stock
+    await tx.product.update({
+      where: { id: item.productId },
+      data: { stock: { decrement: item.quantity } }
+    });
   }
 
-  // 2. Deduct stock
-  await tx.product.update({
-    where: { id: productId },
-    data: { stock: { decrement: quantity } }
-  });
-
-  // 3. Create the order and order item
+  // Create the final order
   // ...
 });
 ```
 **Talking Points:**
-- **Why `$transaction`?** Explain that when building an inventory system, checking stock and deducting stock *must* happen together safely. 
-- If we didn't use a transaction block, high traffic could cause a **race condition** where two requests read `product.stock = 1` at the exact same time, and both successfully deduct it, resulting in `-1` stock in the database!
-- By wrapping these operations in `tx`, we ensure **ACID compliance** (Atomicity, Consistency, Isolation, Durability). The operations are locked together. If the stock drops below the requested quantity, we `throw new Error()`, which safely aborts and rolls back the entire transaction.
+- **Validation:** Highlight that the endpoint aggressively validates input before hitting the database (checking for valid emails, positive integer quantities, and duplicate item arrays).
+- **Security:** We NEVER accept prices or totals from the client. We calculate the `totalInCents` entirely server-side by fetching the product data securely inside the loop.
+- **Why `$transaction`? (Bonus Requirement):** Explain that when building an inventory system, checking stock and deducting stock *must* happen together safely. If we didn't use a transaction block, high traffic could cause a **race condition** where two users buy the last item simultaneously, resulting in negative stock! 
+- By wrapping these operations in `tx`, we ensure **ACID compliance** (Atomicity, Consistency, Isolation, Durability). The operations are locked together. If one item in the array is out of stock, we `throw new Error()`, which safely aborts and rolls back the entire transaction.
 
 ---
 
-## 3. Concurrency Testing (`tests/concurrency.test.ts`)
-We wrote an automated test to physically prove that our transaction prevents race conditions.
+## 3. Order Cancellations (`src/index.ts`)
+The `POST /orders/:id/cancel` endpoint handles returning items to inventory securely.
 
 ```typescript
-it('should handle 15 concurrent purchase attempts cleanly', async () => {
-  const purchaseRequests = Array.from({ length: 15 }).map(() => 
-    request(app).post('/orders').send({ productId: testProductId, quantity: 1 })
-  );
+if (order.status === 'cancelled') {
+  throw new Error('Order is already cancelled'); // Mapped to 409 Conflict
+}
+      
+if (order.status !== 'placed') {
+  throw new Error('Order cannot be cancelled unless in placed status');
+}
 
-  // Fire all 15 requests at the EXACT same time
-  const responses = await Promise.all(purchaseRequests);
-  
-  // Verify exactly 10 succeeded and 5 failed
-  expect(successCount).toBe(10);
-  expect(failCount).toBe(5);
-});
+for (const item of order.orderItems) {
+  await tx.product.update({
+    where: { id: item.productId },
+    data: { stock: { increment: item.quantity } }
+  });
+}
 ```
 **Talking Points:**
-- We seeded exactly `10` stock for a dummy item.
-- We constructed an array of `15` HTTP POST requests using Supertest.
-- We passed that array into `Promise.all()`. This is crucial because it fires all 15 requests asynchronously at the exact same millisecond, simulating a real-world high-traffic spike (like a sneaker drop).
-- The test asserts that exactly 10 succeed and 5 hit the `400 Out of Stock` block, proving our Prisma `$transaction` works perfectly.
+- **Idempotency & Status Checking:** We strictly enforce that the order must be `"placed"`. If it's already `"cancelled"`, we throw a `409 Conflict` error. This guarantees that a user cannot spam the cancel button and artificially print infinite stock back into the database (restoring stock twice).
+- **Batch Restoration:** The transaction safely loops through every item in the original order and cleanly restores the exact quantity originally purchased.
 
 ---
 
@@ -109,17 +129,3 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 - In production (e.g., Kubernetes or Docker Swarm), containers are destroyed and recreated constantly to scale. Before being destroyed, the OS sends a `SIGTERM` signal.
 - If we didn't catch this, the server would instantly die, and users mid-purchase would see an error page.
 - Our code catches the signal, calls `server.close()` to stop accepting *new* traffic, finishes processing *active* traffic, closes the database cleanly, and then exits safely.
-
----
-
-## 5. Next.js Frontend (`client/src/app/page.tsx`)
-We built the UI using React Server/Client Components.
-
-```tsx
-"use client";
-import { useEffect, useState } from "react";
-```
-**Talking Points:**
-- Explain the `"use client"` directive. Next.js uses React Server Components by default to render HTML on the server for performance.
-- Because our inventory dashboard needs to react to user clicks instantly without a page refresh, we need React Hooks like `useState` and `onClick`. The `"use client"` directive tells Next.js to ship this JS to the browser so the UI is fully interactive.
-- Point out that our frontend fetches directly from `http://localhost:3000/products`, which works because we added the `cors` middleware to the Express app.
