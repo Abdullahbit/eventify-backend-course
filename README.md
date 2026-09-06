@@ -47,3 +47,4 @@ To run the automated integration tests that prove race conditions are handled co
 ```bash
 npx vitest run
 ```
+<img width="1480" height="958" alt="image" src="https://github.com/user-attachments/assets/07f57bbe-17ba-4949-9fce-65dc270042bd" />
