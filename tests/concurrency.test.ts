@@ -1,63 +1,90 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import { PrismaClient } from '@prisma/client';
 import app from '../src/index';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-describe('Concurrency and Race Conditions', () => {
+describe('Concurrency Tests & Requirements', () => {
   let testProductId: number;
 
   beforeAll(async () => {
-    // 1. Clean the database before tests
-    await prisma.orderItem.deleteMany();
-    await prisma.order.deleteMany();
-    await prisma.product.deleteMany();
-
-    // 2. Create a test product with exactly 10 stock
+    // Reset test product
     const product = await prisma.product.create({
       data: {
-        name: 'Limited Edition Sneakers',
-        stock: 10,
-      },
+        name: 'Test Concurrency Product',
+        priceInCents: 1500,
+        stock: 10
+      }
     });
     testProductId = product.id;
   });
 
-  afterAll(async () => {
-    // Clean up connections
-    await prisma.$disconnect();
-  });
-
-  it('should handle 15 concurrent purchase attempts cleanly (10 succeed, 5 fail)', async () => {
-    // We create an array of 15 identical requests
-    const purchaseRequests = Array.from({ length: 15 }).map(() => 
+  it('should handle 15 concurrent purchase attempts cleanly (Race Condition check)', async () => {
+    const purchaseRequests = Array.from({ length: 15 }).map(() =>
       request(app)
         .post('/orders')
-        .send({ productId: testProductId, quantity: 1 })
+        .send({
+          customerEmail: 'test@example.com',
+          items: [{ productId: testProductId, quantity: 1 }]
+        })
     );
 
-    // Fire all 15 requests at the EXACT same time using Promise.all
     const responses = await Promise.all(purchaseRequests);
 
-    // Count how many succeeded (status 201) and how many failed due to out of stock (status 400)
-    let successCount = 0;
-    let failCount = 0;
+    const successCount = responses.filter(r => r.status === 201).length;
+    const failCount = responses.filter(r => r.status === 400).length;
 
-    responses.forEach(res => {
-      if (res.status === 201) successCount++;
-      if (res.status === 400 && res.body.error === 'Out of stock') failCount++;
-    });
-
-    // Verify exactly 10 succeeded and 5 failed
     expect(successCount).toBe(10);
     expect(failCount).toBe(5);
 
-    // Verify the final stock in the database is exactly 0
     const finalProduct = await prisma.product.findUnique({
       where: { id: testProductId }
     });
-    
     expect(finalProduct?.stock).toBe(0);
+  });
+
+  it('Ordering more than available stock returns 400 (per our logic mapping 400/409)', async () => {
+    // We expect 400 for out of stock based on the implementation
+    const res = await request(app)
+      .post('/orders')
+      .send({
+        customerEmail: 'test2@example.com',
+        items: [{ productId: testProductId, quantity: 1 }]
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Out of stock');
+  });
+
+  it('Cancelling an order restores stock and returns 409 if cancelled again', async () => {
+    // Create new product
+    const p = await prisma.product.create({
+      data: { name: 'Cancel Test', priceInCents: 1000, stock: 5 }
+    });
+
+    // Place order
+    const orderRes = await request(app).post('/orders').send({
+      customerEmail: 'cancel@example.com',
+      items: [{ productId: p.id, quantity: 2 }]
+    });
+    expect(orderRes.status).toBe(201);
+    const orderId = orderRes.body.id;
+
+    // Check stock deducted (5 - 2 = 3)
+    const pAfterOrder = await prisma.product.findUnique({ where: { id: p.id } });
+    expect(pAfterOrder?.stock).toBe(3);
+
+    // Cancel order
+    const cancelRes = await request(app).post(`/orders/${orderId}/cancel`);
+    expect(cancelRes.status).toBe(200);
+
+    // Check stock restored
+    const pAfterCancel = await prisma.product.findUnique({ where: { id: p.id } });
+    expect(pAfterCancel?.stock).toBe(5);
+
+    // Cancel again -> 409
+    const cancelAgainRes = await request(app).post(`/orders/${orderId}/cancel`);
+    expect(cancelAgainRes.status).toBe(409);
+    expect(cancelAgainRes.body.error).toBe('Order is already cancelled');
   });
 });

@@ -33,43 +33,65 @@ app.get('/products', async (req: Request, res: Response) => {
 
 // POST /orders - Create an order and deduct stock
 app.post('/orders', async (req: Request, res: Response): Promise<any> => {
-  const { productId, quantity } = req.body;
+  const { customerEmail, items } = req.body;
 
-  if (!productId || !quantity || quantity <= 0) {
-    return res.status(400).json({ error: 'Invalid product or quantity' });
+  if (!customerEmail || typeof customerEmail !== 'string' || !customerEmail.includes('@')) {
+    return res.status(400).json({ error: 'Invalid email' });
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Items array is required and cannot be empty' });
+  }
+
+  const productIds = items.map((item: any) => item.productId);
+  if (new Set(productIds).size !== productIds.length) {
+    return res.status(400).json({ error: 'Duplicate product IDs are not allowed' });
+  }
+
+  for (const item of items) {
+    if (!item.productId || typeof item.quantity !== 'number' || item.quantity <= 0 || !Number.isInteger(item.quantity)) {
+      return res.status(400).json({ error: 'Quantities must be positive integers' });
+    }
   }
 
   try {
-    // We use a Prisma Transaction to ensure data consistency
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Fetch the product to check stock
-      const product = await tx.product.findUnique({
-        where: { id: productId }
-      });
+      let totalInCents = 0;
+      const orderItemsData = [];
 
-      if (!product) {
-        throw new Error('Product not found');
+      for (const item of items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId }
+        });
+
+        if (!product) {
+          throw new Error('Product not found');
+        }
+
+        if (product.stock < item.quantity) {
+          throw new Error('Out of stock');
+        }
+
+        totalInCents += product.priceInCents * item.quantity;
+        orderItemsData.push({
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPriceInCents: product.priceInCents
+        });
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } }
+        });
       }
 
-      if (product.stock < quantity) {
-        throw new Error('Out of stock');
-      }
-
-      // 2. Deduct stock
-      await tx.product.update({
-        where: { id: productId },
-        data: { stock: { decrement: quantity } }
-      });
-
-      // 3. Create the order and order item
       const order = await tx.order.create({
         data: {
-          status: 'COMPLETED',
+          customerEmail,
+          totalInCents,
+          status: 'placed',
           orderItems: {
-            create: {
-              productId,
-              quantity
-            }
+            create: orderItemsData
           }
         },
         include: {
@@ -89,13 +111,31 @@ app.post('/orders', async (req: Request, res: Response): Promise<any> => {
   }
 });
 
+// GET /orders/:id - Get order by ID
+app.get('/orders/:id', async (req: Request, res: Response): Promise<any> => {
+  const orderId = parseInt(req.params.id as string, 10);
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { orderItems: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // POST /orders/:id/cancel - Cancel an order and restore stock
 app.post('/orders/:id/cancel', async (req: Request, res: Response): Promise<any> => {
   const orderId = parseInt(req.params.id as string, 10);
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Find the order
       const order = await tx.order.findUnique({
         where: { id: orderId },
         include: { orderItems: true }
@@ -105,11 +145,14 @@ app.post('/orders/:id/cancel', async (req: Request, res: Response): Promise<any>
         throw new Error('Order not found');
       }
 
-      if (order.status === 'CANCELLED') {
+      if (order.status === 'cancelled') {
         throw new Error('Order is already cancelled');
       }
+      
+      if (order.status !== 'placed') {
+        throw new Error('Order cannot be cancelled unless in placed status');
+      }
 
-      // 2. Restore stock for each item in the order
       for (const item of order.orderItems) {
         await tx.product.update({
           where: { id: item.productId },
@@ -117,10 +160,9 @@ app.post('/orders/:id/cancel', async (req: Request, res: Response): Promise<any>
         });
       }
 
-      // 3. Mark the order as CANCELLED
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
-        data: { status: 'CANCELLED' }
+        data: { status: 'cancelled' }
       });
 
       return updatedOrder;
@@ -128,8 +170,14 @@ app.post('/orders/:id/cancel', async (req: Request, res: Response): Promise<any>
 
     res.json(result);
   } catch (error: any) {
-    if (error.message === 'Order not found' || error.message === 'Order is already cancelled') {
-      return res.status(400).json({ error: error.message });
+    if (error.message === 'Order not found') {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.message === 'Order is already cancelled') {
+      return res.status(409).json({ error: error.message });
+    }
+    if (error.message === 'Order cannot be cancelled unless in placed status') {
+       return res.status(400).json({ error: error.message });
     }
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -144,7 +192,6 @@ if (require.main === module) {
   });
 }
 
-// Graceful Shutdown Handler
 const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}. Shutting down gracefully...`);
   if (server) {

@@ -2,19 +2,20 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding database...');
+  console.log('Fetching products from DummyJSON...');
+  const res = await fetch('https://dummyjson.com/products?limit=5');
+  const data = await res.json();
   
-  const products = [
-    { name: 'Wireless Mouse', stock: 10 },
-    { name: 'Mechanical Keyboard', stock: 10 },
-    { name: '27-inch Monitor', stock: 10 },
-    { name: 'USB-C Hub', stock: 10 },
-    { name: 'Ergonomic Chair', stock: 10 },
-  ];
-
-  for (const p of products) {
+  console.log('Seeding database...');
+  for (const item of data.products) {
+    // Math.round(price * 100) to get price in cents
+    const priceInCents = Math.round(item.price * 100);
     await prisma.product.create({
-      data: p,
+      data: {
+        name: item.title,
+        priceInCents: priceInCents,
+        stock: 10,
+      },
     });
   }
 
